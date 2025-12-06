@@ -1,0 +1,27 @@
+
+> ai-course-maker@0.1.0 build
+> next build
+
+   ▲ Next.js 16.0.7 (Turbopack)
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 2.4s
+   Running TypeScript ...
+   Collecting page data using 19 workers ...
+   Generating static pages using 19 workers (0/7) ...
+Error occurred prerendering page "/login". Read more: https://nextjs.org/docs/messages/prerender-error
+Error: supabaseUrl is required.
+    at c.validateSupabaseUrl (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\_84ba0fae._.js:24:44250)
+    at new c.default (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\_84ba0fae._.js:37:41773)
+    at c.createClient (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\_84ba0fae._.js:37:46800)
+    at module evaluation (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\_84ba0fae._.js:37:48257)
+    at instantiateModule (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\[turbopack]_runtime.js:715:9)
+    at getOrInstantiateModuleFromParent (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\[turbopack]_runtime.js:738:12)
+    at Context.esmImport [as i] (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\[turbopack]_runtime.js:228:20)
+    at module evaluation (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\[root-of-the-server]__1ea12fee._.js:1:3331)
+    at instantiateModule (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\[turbopack]_runtime.js:715:9)
+    at getOrInstantiateModuleFromParent (C:\software\Antigravity\ai-course-maker\.next\server\chunks\ssr\[turbopack]_runtime.js:738:12) {
+  digest: '2296574854'
+}
+Export encountered an error on /(auth)/login/page: /login, exiting the build.
+ ⨯ Next.js build worker exited with code: 1 and signal: null
