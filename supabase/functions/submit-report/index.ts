@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { student_id, access_key, file_path, course_id, session_id } = await req.json()
+    const { student_id, access_key, file_path, course_id, session_id, original_filename } = await req.json()
     if (!student_id || !access_key || !file_path || !course_id || !session_id) {
         throw new Error("Missing required fields");
     }
@@ -112,6 +112,7 @@ Deno.serve(async (req) => {
             session_id,
             student_id,
             file_url: file_path, // Assumed to be Supabase Storage path or URL provided by client
+            original_filename: original_filename,
             is_early_bird,
             is_late,
             status: 'pending' // Waiting for AI

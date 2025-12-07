@@ -188,7 +188,7 @@ function GradingContent() {
                                             className="text-blue-600 underline text-sm"
                                             download
                                         >
-                                            Download Latest
+                                            Download ({item.latestSubmission.original_filename ? item.latestSubmission.original_filename.substring(0, 15) + (item.latestSubmission.original_filename.length > 15 ? '...' : '') : 'Latest'})
                                         </a>
                                     ) : '-'}
                                 </TableCell>
@@ -240,7 +240,8 @@ function GradingContent() {
                                             target="_blank" 
                                             className="text-blue-600 underline"
                                         >
-                                            Download
+
+                                            {sub.original_filename || 'Download'}
                                         </a>
                                     </TableCell>
                                     <TableCell>{sub.score || '-'}</TableCell>

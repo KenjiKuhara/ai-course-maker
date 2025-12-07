@@ -51,6 +51,7 @@ create table submissions (
   session_id int not null references sessions(session_id),
   student_id text not null references students(student_id),
   file_url text not null,
+  original_filename text, -- Original name of the uploaded file
   score int, -- 0-100
   ai_feedback text,
   is_early_bird boolean default false, -- Bonus Flag (+5)

@@ -93,7 +93,8 @@ function SubmitContent() {
         access_key: accessKey,
         file_path: filePath,
         course_id: courseIdParam,
-        session_id: resolvedSessionId
+        session_id: resolvedSessionId,
+        original_filename: file.name
       })
 
       if (error) throw new Error(error.message || 'Submission failed')
