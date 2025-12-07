@@ -35,9 +35,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { student_id, access_key, file_path, course_id, session_id, original_filename } = await req.json()
+    const { student_id, access_key, file_path, course_id, session_id, original_filename, report_text } = await req.json()
     if (!student_id || !access_key || !file_path || !course_id || !session_id) {
-        throw new Error("Missing required fields");
+        throw new Error("必須項目が不足しています");
     }
 
     const adminClient = createClient(
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
         .eq('student_id', student_id)
         .single();
     
-    if (stError || !student) throw new Error("Invalid Student ID");
+    if (stError || !student) throw new Error("学籍番号が無効です");
 
     // Decrypt DB key
     const encryptionKey = Deno.env.get('ENCRYPTION_KEY');
@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     const dbKey = new TextDecoder().decode(dbKeyRaw);
 
     if (dbKey !== access_key) {
-        throw new Error("Invalid Access Key");
+        throw new Error("アクセスキーが間違っています");
     }
 
     // 2. Check Enrollment
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
         .eq('is_active', true)
         .single();
     
-    if (enError || !enrollment) throw new Error("Not enrolled in this course");
+    if (enError || !enrollment) throw new Error("このコースに登録されていません");
 
     // 3. Check Deadline
     const { data: session, error: sessError } = await adminClient
@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         .eq('session_id', session_id)
         .single();
     
-    if (sessError || !session) throw new Error("Invalid Session");
+    if (sessError || !session) throw new Error("セッションが無効です");
 
     const now = new Date();
     const deadline = new Date(session.deadline);
@@ -113,6 +113,7 @@ Deno.serve(async (req) => {
             student_id,
             file_url: file_path, // Assumed to be Supabase Storage path or URL provided by client
             original_filename: original_filename,
+            report_text: report_text, // Saved extracted text
             is_early_bird,
             is_late,
             status: 'pending' // Waiting for AI

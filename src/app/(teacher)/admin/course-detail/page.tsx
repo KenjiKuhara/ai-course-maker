@@ -112,7 +112,7 @@ function CourseDetailContent() {
             }
         }
 
-        alert(`Import Complete!\nSuccess: ${successCount}\nErrors: ${errors.length}\n${errors.join('\n')}`)
+        alert(`インポート完了!\n成功: ${successCount}件\nエラー: ${errors.length}件\n${errors.join('\n')}`)
         setImporting(false)
         if (fileInputRef.current) fileInputRef.current.value = ''
         fetchCourseData()
@@ -120,14 +120,14 @@ function CourseDetailContent() {
     reader.readAsText(file)
   }
 
-  if (loading) return <div>Loading course...</div>
-  if (!course) return <div>Course not found</div>
+  if (loading) return <div>コース情報を読み込み中...</div>
+  if (!course) return <div>コースが見つかりません</div>
 
   return (
     <div className="space-y-8">
         <div className="flex justify-between items-center">
             <div>
-                <Link href="/admin" className="text-blue-500 hover:underline mb-2 block">← Back to Dashboard</Link>
+                <Link href="/admin" className="text-blue-500 hover:underline mb-2 block">← ダッシュボードに戻る</Link>
                 <h2 className="text-3xl font-bold tracking-tight">{course.title}</h2>
                 <p className="text-gray-500">{course.year} {course.term}</p>
             </div>
@@ -144,35 +144,35 @@ function CourseDetailContent() {
                         id="csv-upload"
                     />
                     <Label htmlFor="csv-upload" className={`cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 ${importing ? 'opacity-50' : ''}`}>
-                        {importing ? 'Importing...' : 'Import CSV'}
+                        {importing ? 'インポート中...' : 'CSVインポート'}
                     </Label>
                  </div>
                  
                  <Link href={`/admin/grading?id=${courseId}`}>
-                    <Button>Go to Grading</Button>
+                    <Button>採点ページへ</Button>
                  </Link>
             </div>
         </div>
 
         <Tabs defaultValue="students" className="w-full">
             <TabsList>
-                <TabsTrigger value="students">Students ({students.length})</TabsTrigger>
-                <TabsTrigger value="sessions">Session Management</TabsTrigger>
+                <TabsTrigger value="students">学生一覧 ({students.length})</TabsTrigger>
+                <TabsTrigger value="sessions">セッション管理</TabsTrigger>
             </TabsList>
             
             <TabsContent value="students">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Enrolled Students</CardTitle>
+                        <CardTitle>履修学生</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Student ID</TableHead>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead>Actions</TableHead>
+                                    <TableHead>学籍番号</TableHead>
+                                    <TableHead>氏名</TableHead>
+                                    <TableHead>メールアドレス</TableHead>
+                                    <TableHead>操作</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -193,7 +193,7 @@ function CourseDetailContent() {
                                                     size="sm"
                                                     onClick={async () => {
                                                         const newStatus = student.enrollment_status === 'dropped' ? 'Active' : 'Dropped';
-                                                        if (confirm(`Mark ${student.name} as ${newStatus}?`)) {
+                                                        if (confirm(`${student.name} を ${newStatus} に変更しますか?`)) {
                                                             const { error } = await ApiClient.toggleEnrollmentStatus(student.student_id, courseId as string);
                                                             if (error) {
                                                                 alert(`Failed: ${error.message}`);
@@ -203,7 +203,7 @@ function CourseDetailContent() {
                                                         }
                                                     }}
                                                 >
-                                                    {student.enrollment_status === 'dropped' ? 'Activate' : 'Drop'}
+                                                    {student.enrollment_status === 'dropped' ? '復帰' : '履修中止'}
                                                 </Button>
 
                                                 <Button 
@@ -211,18 +211,18 @@ function CourseDetailContent() {
                                                     size="sm"
                                                     className="text-red-500 hover:text-red-700 hover:bg-red-50"
                                                     onClick={async () => {
-                                                        if (confirm(`Are you sure you want to reset the email for ${student.name}?`)) {
+                                                        if (confirm(`${student.name} さんのメールアドレスをリセットしてもよろしいですか？`)) {
                                                             const { error } = await ApiClient.resetStudentEmail(student.student_id);
                                                             if (error) {
-                                                                alert(`Failed: ${error.message}`);
+                                                                alert(`失敗しました: ${error.message}`);
                                                             } else {
-                                                                alert("Email reset successfully.");
+                                                                alert("メールアドレスをリセットしました。");
                                                                 fetchCourseData(); 
                                                             }
                                                         }
                                                     }}
                                                 >
-                                                    Reset Email
+                                                    メールリセット
                                                 </Button>
                                             </div>
                                         </TableCell>
@@ -230,7 +230,7 @@ function CourseDetailContent() {
                                 ))}
                                 {students.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center text-gray-500">No students enrolled.</TableCell>
+                                        <TableCell colSpan={4} className="text-center text-gray-500">履修学生はいません。</TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
@@ -242,18 +242,18 @@ function CourseDetailContent() {
             <TabsContent value="sessions">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Session Management &amp; Submission Links</CardTitle>
+                        <CardTitle>セッション管理 &amp; 提出リンク</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-6">
                             <div className="flex items-center gap-4">
                                 <p className="text-sm text-gray-500">
-                                    Students can submit reports using links generated here. You can initialize 15 standard sessions instantly.
+                                    学生はここで生成されたリンクを使用してレポートを提出できます。標準の15回分のセッションを一括作成できます。
                                 </p>
                                 <Button 
                                     variant="outline"
                                     onClick={async () => {
-                                        if (!confirm("Initialize 15 sessions (Lecture 1-15)? Existing sessions will be skipped.")) return;
+                                        if (!confirm("第1回から第15回のセッションを初期化しますか？既存のセッションはスキップされます。")) return;
                                         
                                         const sessionsToCreate = Array.from({ length: 15 }, (_, i) => ({
                                             course_id: courseId,
@@ -279,11 +279,11 @@ function CourseDetailContent() {
                                                 else createdCount++;
                                             }
                                         }
-                                        alert(`Initialization Complete.\nCreated ${createdCount} new sessions.\n(Skipped ${sessionsToCreate.length - createdCount} existing sessions).`);
+                                        alert(`初期化完了\n作成: ${createdCount}件\n(スキップ: ${sessionsToCreate.length - createdCount}件)`);
                                         fetchCourseData(); 
                                     }}
                                 >
-                                    Initialize Sessions (1-15)
+                                    セッション初期化 (1-15回)
                                 </Button>
                             </div>
 
@@ -299,16 +299,16 @@ function CourseDetailContent() {
                                             onClick={() => {
                                                 if (exists) {
                                                     navigator.clipboard.writeText(link);
-                                                    alert(`Copied Link for Session ${num}`);
+                                                    alert(`第${num}回のリンクをコピーしました`);
                                                 } else {
-                                                    alert(`Session ${num} does not exist yet. Please click "Initialize Sessions" first.`);
+                                                    alert(`第${num}回のセッションはまだ作成されていません。「セッション初期化」をクリックしてください。`);
                                                 }
                                             }}
                                         >
                                             <div className="flex flex-col">
-                                                <span className="font-medium text-sm">Session {num}</span>
+                                                <span className="font-medium text-sm">第{num}回</span>
                                                 <span className={`text-xs ${exists ? 'text-green-600' : 'text-red-500'}`}>
-                                                    {exists ? 'Active' : 'Not Created'}
+                                                    {exists ? '有効' : '未作成'}
                                                 </span>
                                             </div>
                                             <Button 
@@ -323,7 +323,7 @@ function CourseDetailContent() {
                                                     }
                                                 }}
                                             >
-                                                {exists ? 'Copy Link' : '-'}
+                                                {exists ? 'リンクをコピー' : '-'}
                                             </Button>
                                         </div>
                                     )

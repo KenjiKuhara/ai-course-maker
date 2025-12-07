@@ -9,8 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Label } from '@/components/ui/label'
 
 function GradingContent() {
   const searchParams = useSearchParams()
@@ -27,6 +28,13 @@ function GradingContent() {
   // History Modal
   const [historyOpen, setHistoryOpen] = useState(false)
   const [selectedStudentHistory, setSelectedStudentHistory] = useState<any>(null)
+
+  // Detail/Approval Modal
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [selectedSubmission, setSelectedSubmission] = useState<any>(null)
+  const [teacherComment, setTeacherComment] = useState('')
+  const [scoreOverride, setScoreOverride] = useState('')
+  const [actionLoading, setActionLoading] = useState(false)
 
   useEffect(() => {
     if (courseId) {
@@ -51,24 +59,13 @@ function GradingContent() {
   const fetchGradingData = async () => {
     setLoading(true)
     
-    // 1. Get Session ID for selected number
-    const targetSession = sessions.find(s => s.session_number.toString() === selectedSessionNum)
-    if (!targetSession?.session_id) {
-        // Retry logic if sessions weren't loaded yet? Or just wait for sessions to load.
-        // If sessions are empty, we might not be able to fetch. 
-        // We rely on 'sessions' state. If it's empty, we might need to fetch session by number directly/
-        // But let's assume sessions loaded fast.
-    }
-
-    // 2. Fetch All Students (Active & Dropped)
-    // We want to see everyone enrolled.
+    // 1. Fetch All Students (Active & Dropped)
     const { data: enrollments } = await supabase
         .from('enrollments')
         .select('*, students(*)')
         .eq('course_id', courseId)
     
-    // 3. Fetch Submissions for this Session
-    // We need the ACTUAL session_id data from DB to query submissions
+    // 2. Fetch Submissions for this Session
     const { data: sessionData } = await supabase
         .from('sessions')
         .select('session_id')
@@ -84,14 +81,11 @@ function GradingContent() {
             .from('submissions')
             .select('*')
             .eq('session_id', validSessionId)
-            .order('submitted_at', { ascending: false }) // Latest first
+            .order('submitted_at', { ascending: false })
         submissions = subData || []
     }
 
-    // 4. Merge Data
-    // We want one row per student.
-    // If multiple submissions, pick the latest one for display, but keep all for history.
-    
+    // 3. Merge Data
     if (enrollments) {
         const merged = enrollments.map((enr: any) => {
             const studentId = enr.student_id
@@ -103,12 +97,11 @@ function GradingContent() {
                 enrollment: enr,
                 latestSubmission: latestSubmission,
                 allSubmissions: studentSubmissions,
-                status: latestSubmission ? (latestSubmission.status || 'Submitted') : 'Missing',
+                status: latestSubmission ? (latestSubmission.status || 'pending') : 'missing',
                 submissionCount: studentSubmissions.length
             }
         })
         
-        // Sort: Submitted first, then by ID? Or just by ID. Let's do by Student ID.
         merged.sort((a: any, b: any) => a.student.student_id.localeCompare(b.student.student_id))
         setGradingData(merged)
     }
@@ -117,28 +110,98 @@ function GradingContent() {
   }
 
   const getFileUrl = (path: string) => {
-      // Assuming public bucket or signed URL. 
-      // If public bucket:
       return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/submissions/${path}`
+  }
+
+  // Status Badge Component
+  const StatusBadge = ({ status }: { status: string }) => {
+    switch (status) {
+      case 'pending':
+        return <Badge className="bg-yellow-500 hover:bg-yellow-600">AI採点中</Badge>
+      case 'ai_graded':
+        return <Badge className="bg-blue-500 hover:bg-blue-600">確認待ち</Badge>
+      case 'approved':
+        return <Badge className="bg-green-600 hover:bg-green-700">承認済み</Badge>
+      case 'rejected':
+        return <Badge variant="destructive">却下</Badge>
+      case 'missing':
+        return <Badge variant="destructive">未提出</Badge>
+      default:
+        return <Badge variant="secondary">{status}</Badge>
+    }
+  }
+
+  // Trigger AI Grading
+  const triggerAiGrading = async (submissionId: string) => {
+    setActionLoading(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-grade', {
+        body: { submission_id: submissionId }
+      })
+      if (error) {
+        console.error('AI Grading Error:', error, data)
+        throw new Error(error.message + (data?.error ? ': ' + data.error : ''))
+      }
+      console.log('AI Grading Success:', data)
+      await fetchGradingData()
+    } catch (e: any) {
+      console.error('Full error:', e)
+      alert('AI採点エラー: ' + e.message)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Open detail modal
+  const openDetailModal = (item: any) => {
+    setSelectedSubmission(item)
+    setTeacherComment(item.latestSubmission?.teacher_comment || '')
+    setScoreOverride(item.latestSubmission?.score?.toString() || '')
+    setDetailOpen(true)
+  }
+
+  // Approve/Reject submission
+  const handleApproval = async (action: 'approve' | 'reject') => {
+    if (!selectedSubmission?.latestSubmission) return
+    
+    setActionLoading(true)
+    try {
+      const { error } = await supabase.functions.invoke('teacher-approve', {
+        body: {
+          submission_id: selectedSubmission.latestSubmission.id,
+          action,
+          teacher_comment: teacherComment,
+          score_override: scoreOverride ? parseInt(scoreOverride) : undefined
+        }
+      })
+      if (error) throw error
+      
+      setDetailOpen(false)
+      await fetchGradingData()
+    } catch (e: any) {
+      alert('エラー: ' + e.message)
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   return (
     <div className="space-y-6">
         <div className="flex justify-between items-center">
              <div>
-                <Link href={`/admin/course-detail?id=${courseId}`} className="text-blue-500 hover:underline mb-2 block">← Back to Course</Link>
-                <h2 className="text-3xl font-bold tracking-tight">Grading: {courseTitle}</h2>
+                <Link href={`/admin/course-detail?id=${courseId}`} className="text-blue-500 hover:underline mb-2 block">← コース詳細に戻る</Link>
+                <h2 className="text-3xl font-bold tracking-tight">採点・評価: {courseTitle}</h2>
             </div>
             <div className="flex items-center gap-2">
-                <span className="font-medium">Session:</span>
+                <span className="font-medium">セッション:</span>
                 <Select value={selectedSessionNum} onValueChange={setSelectedSessionNum}>
                     <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Select Session" />
+                        <SelectValue placeholder="セッションを選択" />
                     </SelectTrigger>
                     <SelectContent>
                         {Array.from({length: 15}, (_, i) => i + 1).map(num => (
                             <SelectItem key={num} value={num.toString()}>
-                                Session {num} {sessions.find(s => s.session_number === num)?.title ? `- ${sessions.find(s => s.session_number === num)?.title}` : ''}
+                                第{num}回 {sessions.find(s => s.session_number === num)?.title ? `- ${sessions.find(s => s.session_number === num)?.title}` : ''}
                             </SelectItem>
                         ))}
                     </SelectContent>
@@ -148,37 +211,41 @@ function GradingContent() {
 
         <Card>
             <CardHeader>
-                <CardTitle>Student Status for Session {selectedSessionNum}</CardTitle>
+                <CardTitle>第{selectedSessionNum}回 提出状況一覧</CardTitle>
             </CardHeader>
             <CardContent>
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Student ID</TableHead>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Latest File</TableHead>
-                            <TableHead>Submitted At</TableHead>
-                            <TableHead>Actions</TableHead>
+                            <TableHead>学籍番号</TableHead>
+                            <TableHead>氏名</TableHead>
+                            <TableHead>ステータス</TableHead>
+                            <TableHead>点数</TableHead>
+                            <TableHead>最新ファイル</TableHead>
+                            <TableHead>提出日時</TableHead>
+                            <TableHead>操作</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {loading ? (
-                            <TableRow><TableCell colSpan={6} className="text-center">Loading...</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={7} className="text-center">読み込み中...</TableCell></TableRow>
                         ) : gradingData.map((item) => (
                             <TableRow key={item.student.student_id} className={item.enrollment.status === 'dropped' ? 'opacity-50 bg-gray-50' : ''}>
                                 <TableCell className="font-medium">{item.student.student_id}</TableCell>
                                 <TableCell>
                                     {item.student.name}
-                                    {item.enrollment.status === 'dropped' && <Badge variant="secondary" className="ml-2">Dropped</Badge>}
+                                    {item.enrollment.status === 'dropped' && <Badge variant="secondary" className="ml-2">取下</Badge>}
                                 </TableCell>
                                 <TableCell>
-                                    {item.latestSubmission ? (
-                                        <Badge className="bg-green-600 hover:bg-green-700">Submitted</Badge>
-                                    ) : (
-                                        <Badge variant="destructive">Missing</Badge>
-                                    )}
-                                    {item.latestSubmission?.is_late && <Badge variant="outline" className="ml-2 text-red-500 border-red-500">Late</Badge>}
+                                    <StatusBadge status={item.status} />
+                                    {item.latestSubmission?.is_late && <Badge variant="outline" className="ml-2 text-red-500 border-red-500">遅刻</Badge>}
+                                </TableCell>
+                                <TableCell>
+                                    {item.latestSubmission?.score !== null && item.latestSubmission?.score !== undefined ? (
+                                        <span className={`font-bold ${item.latestSubmission.score >= 60 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {item.latestSubmission.score}点
+                                        </span>
+                                    ) : '-'}
                                 </TableCell>
                                 <TableCell>
                                     {item.latestSubmission ? (
@@ -188,25 +255,48 @@ function GradingContent() {
                                             className="text-blue-600 underline text-sm"
                                             download
                                         >
-                                            Download ({item.latestSubmission.original_filename ? item.latestSubmission.original_filename.substring(0, 15) + (item.latestSubmission.original_filename.length > 15 ? '...' : '') : 'Latest'})
+                                            ダウンロード ({item.latestSubmission.original_filename ? item.latestSubmission.original_filename.substring(0, 15) + (item.latestSubmission.original_filename.length > 15 ? '...' : '') : '最新'})
                                         </a>
                                     ) : '-'}
                                 </TableCell>
                                 <TableCell>
-                                    {item.latestSubmission ? new Date(item.latestSubmission.submitted_at).toLocaleString() : '-'}
+                                    {item.latestSubmission ? new Date(item.latestSubmission.submitted_at).toLocaleString('ja-JP') : '-'}
                                 </TableCell>
                                 <TableCell>
-                                    <Button 
-                                        variant="ghost" 
-                                        size="sm"
-                                        onClick={() => {
-                                            setSelectedStudentHistory(item)
-                                            setHistoryOpen(true)
-                                        }}
-                                        disabled={item.submissionCount === 0}
-                                    >
-                                        History ({item.submissionCount})
-                                    </Button>
+                                    <div className="flex gap-1">
+                                        {item.latestSubmission && (
+                                            <>
+                                                <Button 
+                                                    variant="outline" 
+                                                    size="sm"
+                                                    onClick={() => openDetailModal(item)}
+                                                >
+                                                    詳細
+                                                </Button>
+                                                {(item.status === 'pending' || item.status === 'ai_graded') && (
+                                                    <Button 
+                                                        variant="ghost" 
+                                                        size="sm"
+                                                        onClick={() => triggerAiGrading(item.latestSubmission.id)}
+                                                        disabled={actionLoading}
+                                                    >
+                                                        再採点
+                                                    </Button>
+                                                )}
+                                            </>
+                                        )}
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm"
+                                            onClick={() => {
+                                                setSelectedStudentHistory(item)
+                                                setHistoryOpen(true)
+                                            }}
+                                            disabled={item.submissionCount === 0}
+                                        >
+                                            履歴 ({item.submissionCount})
+                                        </Button>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -214,6 +304,99 @@ function GradingContent() {
                 </Table>
             </CardContent>
         </Card>
+
+        {/* Detail/Approval Modal */}
+        <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>
+                        採点詳細: {selectedSubmission?.student.name} ({selectedSubmission?.student.student_id})
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                    {/* AI Feedback Section */}
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                        <h4 className="font-semibold text-blue-800 mb-2">🤖 AI採点結果</h4>
+                        <div className="flex items-center gap-4 mb-2">
+                            <span className="text-2xl font-bold text-blue-600">
+                                {selectedSubmission?.latestSubmission?.score ?? '-'}点
+                            </span>
+                            <StatusBadge status={selectedSubmission?.status || 'pending'} />
+                        </div>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                            {selectedSubmission?.latestSubmission?.ai_feedback || 'AI採点結果がありません'}
+                        </p>
+                    </div>
+
+                    {/* Teacher Override Section */}
+                    <div className="space-y-3">
+                        <h4 className="font-semibold">👩‍🏫 先生の評価</h4>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label htmlFor="score-override">スコア修正 (0-100)</Label>
+                                <input
+                                    id="score-override"
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={scoreOverride}
+                                    onChange={(e) => setScoreOverride(e.target.value)}
+                                    className="w-full mt-1 p-2 border rounded-md"
+                                    placeholder={selectedSubmission?.latestSubmission?.score?.toString() || ''}
+                                />
+                            </div>
+                            <div>
+                                <Label>ファイル</Label>
+                                {selectedSubmission?.latestSubmission && (
+                                    <a 
+                                        href={getFileUrl(selectedSubmission.latestSubmission.file_url)} 
+                                        target="_blank" 
+                                        className="block mt-1 text-blue-600 underline"
+                                        download
+                                    >
+                                        📎 {selectedSubmission.latestSubmission.original_filename || 'Download'}
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+
+                        <div>
+                            <Label htmlFor="teacher-comment">先生からのコメント</Label>
+                            <textarea
+                                id="teacher-comment"
+                                value={teacherComment}
+                                onChange={(e) => setTeacherComment(e.target.value)}
+                                className="w-full mt-1 p-2 border rounded-md h-24"
+                                placeholder="学生へのフィードバックを入力..."
+                            />
+                        </div>
+                    </div>
+                </div>
+                <DialogFooter className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => setDetailOpen(false)}
+                    >
+                        キャンセル
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        onClick={() => handleApproval('reject')}
+                        disabled={actionLoading}
+                    >
+                        却下（再提出要求）
+                    </Button>
+                    <Button
+                        onClick={() => handleApproval('approve')}
+                        disabled={actionLoading}
+                        className="bg-green-600 hover:bg-green-700"
+                    >
+                        承認
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
         {/* History Modal */}
         <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
@@ -228,6 +411,7 @@ function GradingContent() {
                                 <TableHead>Date</TableHead>
                                 <TableHead>File</TableHead>
                                 <TableHead>Score</TableHead>
+                                <TableHead>Status</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -244,7 +428,8 @@ function GradingContent() {
                                             {sub.original_filename || 'Download'}
                                         </a>
                                     </TableCell>
-                                    <TableCell>{sub.score || '-'}</TableCell>
+                                    <TableCell>{sub.score ?? '-'}</TableCell>
+                                    <TableCell><StatusBadge status={sub.status || 'pending'} /></TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>

@@ -31,12 +31,12 @@ export default function TeacherLayout({
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow p-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold text-gray-800">AI Course Maker (Admin)</h1>
+        <h1 className="text-xl font-bold text-gray-800">AI Course Maker (管理画面)</h1>
         <button 
             onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }}
             className="text-sm text-red-600 hover:text-red-800"
         >
-            Logout
+            ログアウト
         </button>
       </header>
       <main className="p-8">

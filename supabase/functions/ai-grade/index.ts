@@ -13,78 +13,123 @@ Deno.serve(async (req) => {
 
   try {
     const { submission_id } = await req.json()
-    if (!submission_id) throw new Error("Missing submission_id");
+    console.log('Received submission_id:', submission_id)
+    
+    if (!submission_id) throw new Error("submission_idが不足しています");
 
-    const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const geminiKey = Deno.env.get('GEMINI_API_KEY')
+    
+    const supabase = createClient(supabaseUrl ?? '', supabaseKey ?? '');
 
     // 1. Get Submission
     const { data: submission, error: subError } = await supabase
         .from('submissions')
-        .select('*, sessions(title)')
+        .select('*, sessions(title, course_id)')
         .eq('id', submission_id)
         .single();
     
-    if (subError || !submission) throw new Error("Submission not found");
+    if (subError) throw new Error("提出物が見つかりません: " + subError.message);
+    
+    console.log('Submission found:', submission.id, 'file:', submission.file_url)
 
-    // 2. Get Content (Mocking content retrieval - assuming text stored in file_url or just grading based on dummy content for now since we don't have storage logic implemented fully)
-    // In real app: download from Storage.
-    const content = "This is a sample report text content."; // Placeholder.
+    // 2. Get Content (Prioritize report_text)
+    let content = submission.report_text || "";
+    const filePath = submission.file_url;
+    const fileName = submission.original_filename?.toLowerCase() || filePath.toLowerCase();
+    
+    if (!content && filePath) {
+      console.log('No report_text found, attempting download fallback...')
+      // Fallback for old submissions or if text extraction failed on client
+      const { data: fileData, error: downloadError } = await supabase.storage
+          .from('submissions')
+          .download(filePath);
+      
+      if (downloadError) {
+        content = "ファイルダウンロードエラー: " + downloadError.message;
+      } else if (fileData) {
+        const arrayBuffer = await fileData.arrayBuffer();
+        if (fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.csv') || fileName.endsWith('.json')) {
+           const decoder = new TextDecoder('utf-8');
+           content = decoder.decode(arrayBuffer).substring(0, 20000);
+        } else {
+           content = "【システム注記】この提出は古い方式で行われたか、テキスト抽出に失敗しました。PDFまたはWordファイルの場合は、テキスト抽出が行われていないためAIは内容を読めません。";
+        }
+      }
+    } else {
+      console.log('Using extracted report_text from database. Length:', content.length);
+    }
 
-    // 3. Call Gemini
-    const geminiKey = Deno.env.get('GEMINI_API_KEY');
-    if (!geminiKey) throw new Error("GEMINI_API_KEY missing");
+    // 3. Get session title
+    const sessionTitle = submission.sessions?.title || "課題";
+
+    // 4. Call Gemini
+    if (!geminiKey) throw new Error("GEMINI_API_KEYが設定されていません");
 
     const prompt = `
-    You are a strict university professor. Grade the following report for the course task "${submission.sessions?.title}".
-    Content: "${content}"
-    
-    Output JSON format:
-    {
-        "score": number (0-100),
-        "feedback": "string (Japanese, constructive feedback)"
-    }
-    `;
+あなたは大学の教授です。以下のレポートを採点してください。
 
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${geminiKey}`, {
+課題: 「${sessionTitle}」
+
+=== 提出レポート情報 ===
+ファイル名: ${fileName}
+内容（抽出テキスト）:
+${content.substring(0, 15000)}
+=== 情報終わり ===
+
+注意：
+- 「テキスト抽出に失敗しました」や「バイナリデータ」とある場合は、内容は評価せず、score: 0 で feedback: "ファイルの中身を読み取れませんでした。再提出してください。" と回答してください。
+- 抽出されたテキストが意味を成している場合のみ、内容に基づいて採点してください。
+
+JSON形式で回答:
+{"score": 数値(0-100), "feedback": "日本語フィードバック"}
+`;
+
+    console.log('Calling Gemini API (gemini-2.0-flash)...')
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
+            generationConfig: { 
+              responseMimeType: "application/json",
+              temperature: 0.3
+            }
         })
     });
 
     if (!geminiRes.ok) {
-        const errObj = await geminiRes.text();
-        console.error("Gemini Error:", errObj);
-        throw new Error("AI Grading Failed");
+        const errText = await geminiRes.text();
+        console.error("Gemini API Error:", geminiRes.status, errText);
+        throw new Error("Gemini APIエラー: " + geminiRes.status);
     }
 
     const geminiData = await geminiRes.json();
-    const resultText = geminiData.candidates[0].content.parts[0].text;
+    const resultText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!resultText) throw new Error("Geminiからの応答が無効な形式です");
+    
     const result = JSON.parse(resultText);
+    console.log('Parsed result:', result)
 
-    // 4. Update Submission
+    // 5. Update Submission
     const { error: updateError } = await supabase
         .from('submissions')
         .update({
             score: result.score,
             ai_feedback: result.feedback,
-            status: 'graded'
+            status: 'ai_graded'
         })
         .eq('id', submission_id);
 
-    if (updateError) throw updateError;
+    if (updateError) throw new Error("提出物の更新に失敗しました: " + updateError.message);
 
     return new Response(
       JSON.stringify({ success: true, result }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
-    console.error(error);
+    console.error('Function error:', error)
     return new Response(
       JSON.stringify({ error: error.message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }

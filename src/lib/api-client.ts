@@ -11,7 +11,7 @@ export class ApiClient {
     return await supabase.functions.invoke('teacher-rescue-key', { body: { student_id: studentId } })
   }
 
-  static async submitReport(data: { student_id: string; access_key: string; file_path: string; course_id: string; session_id: string; original_filename?: string }) {
+  static async submitReport(data: { student_id: string; access_key: string; file_path: string; course_id: string; session_id: string; original_filename?: string; report_text?: string }) {
     return await supabase.functions.invoke('submit-report', { body: data })
   }
 

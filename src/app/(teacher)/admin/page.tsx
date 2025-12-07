@@ -63,29 +63,29 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-8">
        <div className="flex justify-between items-center">
-         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+         <h2 className="text-3xl font-bold tracking-tight">ダッシュボード</h2>
        </div>
 
        {/* Create Course Form */}
        <Card>
          <CardHeader>
-           <CardTitle>Create New Course</CardTitle>
+           <CardTitle>新規コース作成</CardTitle>
          </CardHeader>
          <CardContent>
            <form onSubmit={handleCreateCourse} className="flex gap-4 items-end">
              <div className="grid w-full max-w-sm items-center gap-1.5">
-               <Label htmlFor="title">Course Title</Label>
+               <Label htmlFor="title">コース名</Label>
                <Input id="title" value={newTitle} onChange={e => setNewTitle(e.target.value)} required />
              </div>
              <div className="grid w-full max-w-[100px] items-center gap-1.5">
-               <Label htmlFor="year">Year</Label>
+               <Label htmlFor="year">年度</Label>
                <Input id="year" type="number" value={newYear} onChange={e => setNewYear(e.target.value)} required />
              </div>
              <div className="grid w-full max-w-[100px] items-center gap-1.5">
-               <Label htmlFor="term">Term</Label>
+               <Label htmlFor="term">学期</Label>
                <Input id="term" value={newTerm} onChange={e => setNewTerm(e.target.value)} required />
              </div>
-             <Button type="submit">Create</Button>
+             <Button type="submit">作成</Button>
            </form>
          </CardContent>
        </Card>
@@ -103,7 +103,7 @@ export default function AdminDashboard() {
             </Link>
           ))}
           {courses.length === 0 && !loading && (
-            <p className="text-gray-500">No courses found.</p>
+            <p className="text-gray-500">コースが見つかりません。</p>
           )}
        </div>
     </div>

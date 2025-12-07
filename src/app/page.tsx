@@ -9,15 +9,15 @@ export default function Home() {
         <CardHeader>
           <CardTitle className="text-3xl font-bold text-gray-800">AI Course Maker</CardTitle>
           <CardDescription>
-            Automated Course Management & Grading System
+            自動コース管理・AI採点システム
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-500">Select your role to continue:</p>
+          <p className="text-sm text-gray-500">ログインまたは登録を選択してください：</p>
           
           <div className="grid gap-4">
             <Link href="/login" className="w-full">
-              <Button className="w-full" size="lg">Teacher Login</Button>
+              <Button className="w-full" size="lg">教員ログイン</Button>
             </Link>
             
             <div className="relative">
@@ -25,16 +25,16 @@ export default function Home() {
                 <span className="w-full border-t" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-muted-foreground">Or</span>
+                <span className="bg-white px-2 text-muted-foreground">または</span>
               </div>
             </div>
 
             <Link href="/register" className="w-full">
-              <Button variant="outline" className="w-full" size="lg">Student Registration</Button>
+              <Button variant="outline" className="w-full" size="lg">学生登録（アクセスキー発行）</Button>
             </Link>
 
              <Link href="/submit" className="w-full">
-              <Button variant="ghost" className="w-full text-blue-600 underline">Old Submission Link (For Testing)</Button>
+              <Button variant="ghost" className="w-full text-blue-600 underline">旧提出リンク（テスト用）</Button>
             </Link>
           </div>
         </CardContent>

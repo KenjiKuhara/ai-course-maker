@@ -22,7 +22,7 @@ export default function RegisterPage() {
       const { error } = await ApiClient.registerStudent({ student_id: studentId, name: '', email })
       if (error) throw new Error(error.message || 'Registration failed')
       
-      setMessage({ type: 'success', text: 'Registration successful! Please check your email for your Access Key.' })
+      setMessage({ type: 'success', text: '登録が完了しました！アクセスキーがメールに送信されました。' })
       setStudentId('')
       setEmail('')
     } catch (err: any) {
@@ -36,13 +36,13 @@ export default function RegisterPage() {
     <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Activate Your Account</CardTitle>
-          <CardDescription>Enter your Student ID to receive your Access Key.</CardDescription>
+          <CardTitle>アカウント有効化</CardTitle>
+          <CardDescription>学籍番号を入力してアクセスキーを取得してください。</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleRegister} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="studentId">Student ID (学籍番号)</Label>
+              <Label htmlFor="studentId">学籍番号 (Student ID)</Label>
               <Input
                 id="studentId"
                 placeholder="20251234"
@@ -53,7 +53,7 @@ export default function RegisterPage() {
             </div>
             {/* Name is managed by the teacher. */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">メールアドレス</Label>
               <Input
                 id="email"
                 type="email"
@@ -71,7 +71,7 @@ export default function RegisterPage() {
             )}
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Registering...' : 'Get Access Key'}
+              {loading ? '登録中...' : 'アクセスキーを取得'}
             </Button>
           </form>
         </CardContent>

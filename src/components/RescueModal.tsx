@@ -33,18 +33,18 @@ export function RescueModal({ studentId, studentName }: { studentId: string, stu
         if (open) fetchKey()
     }}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">👁️ Rescue</Button>
+        <Button variant="outline" size="sm">👁️ 救済キー</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rescue Key for {studentName}</DialogTitle>
+          <DialogTitle>{studentName} さんの救済キー</DialogTitle>
           <DialogDescription>
-            Show this to the student to allow them to login immediately.
+            学生にこのキーを提示して、即時ログインを許可してください。
           </DialogDescription>
         </DialogHeader>
         
         <div className="flex flex-col items-center gap-6 py-4">
-            {loading && <p>Loading secure key...</p>}
+            {loading && <p>キーを読み込み中...</p>}
             {error && <p className="text-red-500">{error}</p>}
             
             {key && (
@@ -54,10 +54,10 @@ export function RescueModal({ studentId, studentName }: { studentId: string, stu
                     </div>
                     <div className="p-4 bg-white border rounded shadow-sm">
                         <QRCodeSVG value={key} size={200} />
-                        <p className="text-center text-xs text-gray-400 mt-2">Scan to Copy</p>
+                        <p className="text-center text-xs text-gray-400 mt-2">スキャンしてコピー</p>
                     </div>
                     <Button onClick={() => navigator.clipboard.writeText(key)} variant="secondary">
-                        Copy to Clipboard
+                        クリップボードにコピー
                     </Button>
                 </>
             )}

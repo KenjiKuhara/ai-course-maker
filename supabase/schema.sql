@@ -54,10 +54,11 @@ create table submissions (
   original_filename text, -- Original name of the uploaded file
   score int, -- 0-100
   ai_feedback text,
+  teacher_comment text, -- Teacher's manual comment when approving
   is_early_bird boolean default false, -- Bonus Flag (+5)
   is_late boolean default false,
   is_suspicious boolean default false,
-  status text default 'pending',
+  status text default 'pending', -- pending → ai_graded → approved/rejected
   submitted_at timestamptz default now()
 );
 

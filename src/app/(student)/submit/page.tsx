@@ -15,8 +15,8 @@ function SubmitContent() {
   const sessionIdParam = searchParams.get('sid')
   const sessionNumParam = searchParams.get('snum')
 
-  const [courseTitle, setCourseTitle] = useState('Loading...')
-  const [sessionTitle, setSessionTitle] = useState('Loading...')
+  const [courseTitle, setCourseTitle] = useState('読み込み中...')
+  const [sessionTitle, setSessionTitle] = useState('読み込み中...')
   const [resolvedSessionId, setResolvedSessionId] = useState<string | null>(null)
   
   const [studentId, setStudentId] = useState('')
@@ -28,8 +28,8 @@ function SubmitContent() {
 
   useEffect(() => {
     if (!courseIdParam) {
-       setMessage({ type: 'error', text: 'Invalid link. Missing course ID.' })
-       setCourseTitle('Error')
+       setMessage({ type: 'error', text: '無効なリンクです。コースIDが見つかりません。' })
+       setCourseTitle('エラー')
        return
     }
 
@@ -38,7 +38,7 @@ function SubmitContent() {
         // 1. Fetch Course
         const { data: course } = await supabase.from('courses').select('title').eq('course_id', courseIdParam).single()
         if (course) setCourseTitle(course.title)
-        else setCourseTitle('Unknown Course')
+        else setCourseTitle('不明なコース')
 
         // 2. Fetch Session (by ID or Number)
         let sessionData = null;
@@ -54,18 +54,58 @@ function SubmitContent() {
             setResolvedSessionId(sessionData.session_id)
             setSessionTitle(sessionData.title)
         } else {
-             setSessionTitle('Unknown Session')
-             setMessage({ type: 'error', text: 'Session not found or invalid link.' })
+             setSessionTitle('不明なセッション')
+             setMessage({ type: 'error', text: 'セッションが見つからないか、リンクが無効です。' })
         }
 
       } catch (e) {
         console.error(e)
-        setCourseTitle('Error loading data')
-        setSessionTitle('Error')
+        setCourseTitle('データの読み込みエラー')
+        setSessionTitle('エラー')
       }
     }
     fetchInfo()
   }, [courseIdParam, sessionIdParam, sessionNumParam])
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const extractFileText = async (file: File): Promise<string> => {
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    
+    try {
+      if (ext === 'txt' || ext === 'md' || ext === 'csv' || ext === 'json') {
+        return await file.text()
+      } 
+      else if (ext === 'docx') {
+        const arrayBuffer = await file.arrayBuffer()
+        // Dynamic import to avoid SSR issues
+        const mammoth = await import('mammoth')
+        const result = await mammoth.extractRawText({ arrayBuffer })
+        return result.value
+      } 
+      else if (ext === 'pdf') {
+        const arrayBuffer = await file.arrayBuffer()
+        const pdfjsLib = await import('pdfjs-dist')
+        // Set worker using CDN
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+        
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
+        const pdf = await loadingTask.promise
+        let fullText = ''
+        
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i)
+          const textContent = await page.getTextContent()
+          const pageText = textContent.items.map((item: any) => item.str).join(' ')
+          fullText += pageText + '\n'
+        }
+        return fullText
+      }
+    } catch (e) {
+      console.error('Text extraction failed:', e)
+      return "テキスト抽出に失敗しました。"
+    }
+    return ""
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -75,7 +115,11 @@ function SubmitContent() {
     setMessage(null)
 
     try {
-      // 1. Upload File
+      // 1. Extract Text
+      const extractedText = await extractFileText(file)
+      console.log('Extracted text length:', extractedText.length)
+
+      // 2. Upload File
       const ext = file.name.split('.').pop()
       const fileName = `${courseIdParam}/${resolvedSessionId}/${studentId}_${Date.now()}.${ext}`
       const { data: uploadData, error: uploadError } = await supabase
@@ -83,45 +127,54 @@ function SubmitContent() {
         .from('submissions')
         .upload(fileName, file)
 
-      if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
+      if (uploadError) throw new Error(`アップロード失敗: ${uploadError.message}`)
       
       const filePath = uploadData.path
 
-      // 2. Submit API
+      // 3. Submit API
       const { error, data } = await ApiClient.submitReport({
         student_id: studentId,
         access_key: accessKey,
         file_path: filePath,
         course_id: courseIdParam,
         session_id: resolvedSessionId,
-        original_filename: file.name
+        original_filename: file.name,
+        report_text: extractedText
       })
 
-      if (error) throw new Error(error.message || 'Submission failed')
+      if (error) throw new Error(error.message || '提出に失敗しました')
 
       const successMsg = data.is_early_bird 
-        ? 'Submission Successful! Early Bird Bonus Applied! 🎉' 
-        : 'Submission Successful!'
+        ? '提出が完了しました！早期提出ボーナス適用！ 🎉' 
+        : '提出が完了しました！'
       
       setMessage({ type: 'success', text: successMsg })
       setAccessKey('')
       setFile(null)
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message })
+      // Basic translations for common backend errors if they come in English
+      let msg = err.message;
+      if (msg.includes("Invalid Student ID")) msg = "学籍番号が無効です";
+      if (msg.includes("Invalid Access Key")) msg = "アクセスキーが間違っています";
+      if (msg.includes("Missing required fields")) msg = "必須項目が不足しています";
+      if (msg.includes("Not enrolled")) msg = "このコースに登録されていません";
+      if (msg.includes("Invalid Session")) msg = "セッションが無効です";
+      
+      setMessage({ type: 'error', text: msg })
     } finally {
       setLoading(false)
     }
   }
 
   if (!courseIdParam) {
-     return <div className="p-4 text-center text-red-500">Invalid Link: Missing Course ID</div>
+     return <div className="p-4 text-center text-red-500">無効なリンクです: コースIDが見つかりません</div>
   }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Submit Report</CardTitle>
+          <CardTitle>レポート提出</CardTitle>
           <CardDescription>
             {courseTitle} - {sessionTitle}
           </CardDescription>
@@ -129,7 +182,7 @@ function SubmitContent() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="studentId">Student ID</Label>
+              <Label htmlFor="studentId">学籍番号</Label>
               <Input
                 id="studentId"
                 value={studentId}
@@ -139,21 +192,22 @@ function SubmitContent() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="accessKey">Access Key</Label>
+              <Label htmlFor="accessKey">アクセスキー</Label>
               <Input
                 id="accessKey"
                 type="password"
                 value={accessKey}
                 onChange={(e) => setAccessKey(e.target.value)}
                 required
-                placeholder="Your Secret Key"
+                placeholder="秘密のキー"
               />
             </div>
              <div className="space-y-2">
-              <Label htmlFor="file">Report File</Label>
+              <Label htmlFor="file">レポートファイル (PDF, Word, テキスト)</Label>
               <Input
                 id="file"
                 type="file"
+                accept=".pdf,.docx,.txt,.md"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 required
               />
@@ -166,7 +220,7 @@ function SubmitContent() {
             )}
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Submitting...' : 'Submit Report'}
+              {loading ? '提出中...' : '提出する'}
             </Button>
           </form>
         </CardContent>
@@ -177,7 +231,7 @@ function SubmitContent() {
 
 export default function SubmitPage() {
     return (
-        <Suspense fallback={<div className="p-4 text-center">Loading form...</div>}>
+        <Suspense fallback={<div className="p-4 text-center">読み込み中...</div>}>
             <SubmitContent />
         </Suspense>
     )
