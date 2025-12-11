@@ -12,6 +12,15 @@ import { RescueModal } from '@/components/RescueModal'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 function CourseDetailContent() {
   const searchParams = useSearchParams()
@@ -23,6 +32,14 @@ function CourseDetailContent() {
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Prompt Editing State (Session)
+  const [editingPromptSession, setEditingPromptSession] = useState<any>(null)
+  const [promptText, setPromptText] = useState('')
+
+  // System Prompt State (Course)
+  const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false)
+  const [systemPromptText, setSystemPromptText] = useState('')
 
   useEffect(() => {
     if (courseId) fetchCourseData()
@@ -60,6 +77,7 @@ function CourseDetailContent() {
         .from('sessions')
         .select('*')
         .eq('course_id', courseId)
+        .order('session_number', { ascending: true })
     
     if (sessionsError) console.error("Error fetching sessions", sessionsError);
     if (sessionsData) {
@@ -120,6 +138,45 @@ function CourseDetailContent() {
     reader.readAsText(file)
   }
 
+  const handleSavePrompt = async () => {
+    if (!editingPromptSession) return
+    
+    const { error } = await supabase
+      .from('sessions')
+      .update({ grading_prompt: promptText })
+      .eq('session_id', editingPromptSession.session_id)
+      
+    if (error) {
+      alert(`保存に失敗しました: ${error.message}`)
+    } else {
+      alert('プロンプトを保存しました')
+      setEditingPromptSession(null)
+      fetchCourseData()
+    }
+  }
+
+  const handleSaveSystemPrompt = async () => {
+      const { error } = await supabase
+          .from('courses')
+          .update({ system_prompt: systemPromptText })
+          .eq('course_id', courseId)
+      
+      if (error) {
+          alert(`保存失敗: ${error.message}`)
+      } else {
+          alert('システムプロンプトを保存しました')
+          setIsSystemPromptOpen(false)
+          fetchCourseData()
+      }
+  }
+
+    // Smart Term Display
+  const getTermLabel = (term: string) => {
+      if (term === 'Spring') return '前期'
+      if (term === 'Fall') return '後期'
+      return term
+  }
+
   if (loading) return <div>コース情報を読み込み中...</div>
   if (!course) return <div>コースが見つかりません</div>
 
@@ -129,9 +186,20 @@ function CourseDetailContent() {
             <div>
                 <Link href="/admin" className="text-blue-500 hover:underline mb-2 block">← ダッシュボードに戻る</Link>
                 <h2 className="text-3xl font-bold tracking-tight">{course.title}</h2>
-                <p className="text-gray-500">{course.year} {course.term}</p>
+                <p className="text-gray-500">{course.year} {getTermLabel(course.term)}</p>
             </div>
             <div className="flex gap-4 items-center">
+                {/* System Prompt Edit Button */}
+                 <Button 
+                    variant="outline" 
+                    onClick={() => {
+                        setSystemPromptText(course.system_prompt || '')
+                        setIsSystemPromptOpen(true)
+                    }}
+                 >
+                    システムプロンプト設定
+                 </Button>
+
                  {/* CSV Import */}
                  <div className="flex items-center gap-2">
                     <Input 
@@ -289,42 +357,61 @@ function CourseDetailContent() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {Array.from({ length: 15 }, (_, i) => i + 1).map((num) => {
-                                    const exists = sessions.some(s => s.session_number === num);
+                                    const session = sessions.find(s => s.session_number === num);
+                                    const exists = !!session;
                                     const link = `${window.location.origin}/submit?cid=${courseId}&snum=${num}`;
                                     
                                     return (
                                         <div 
                                             key={num} 
-                                            className={`border rounded p-3 flex justify-between items-center transition-colors cursor-pointer ${exists ? 'bg-white hover:bg-gray-50' : 'bg-gray-100 opacity-70'}`}
-                                            onClick={() => {
-                                                if (exists) {
-                                                    navigator.clipboard.writeText(link);
-                                                    alert(`第${num}回のリンクをコピーしました`);
-                                                } else {
-                                                    alert(`第${num}回のセッションはまだ作成されていません。「セッション初期化」をクリックしてください。`);
-                                                }
-                                            }}
+                                            className={`border rounded p-3 flex flex-col gap-2 transition-colors ${exists ? 'bg-white hover:bg-gray-50' : 'bg-gray-100 opacity-70'}`}
                                         >
-                                            <div className="flex flex-col">
-                                                <span className="font-medium text-sm">第{num}回</span>
-                                                <span className={`text-xs ${exists ? 'text-green-600' : 'text-red-500'}`}>
-                                                    {exists ? '有効' : '未作成'}
-                                                </span>
-                                            </div>
-                                            <Button 
-                                                size="sm" 
-                                                variant={exists ? "secondary" : "ghost"}
-                                                disabled={!exists}
-                                                onClick={(e) => {
-                                                    e.stopPropagation(); 
+                                            <div className="flex justify-between items-center"
+                                                 onClick={() => {
                                                     if (exists) {
                                                         navigator.clipboard.writeText(link);
-                                                        alert(`Copied Link for Session ${num}`);
+                                                        alert(`第${num}回のリンクをコピーしました`);
+                                                    } else {
+                                                        alert(`第${num}回のセッションはまだ作成されていません。「セッション初期化」をクリックしてください。`);
                                                     }
                                                 }}
                                             >
-                                                {exists ? 'リンクをコピー' : '-'}
-                                            </Button>
+                                                <div className="flex flex-col cursor-pointer">
+                                                    <span className="font-medium text-sm">第{num}回</span>
+                                                    <span className={`text-xs ${exists ? 'text-green-600' : 'text-red-500'}`}>
+                                                        {exists ? '有効' : '未作成'}
+                                                    </span>
+                                                </div>
+                                                <Button 
+                                                    size="sm" 
+                                                    variant={exists ? "secondary" : "ghost"}
+                                                    disabled={!exists}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation(); 
+                                                        if (exists) {
+                                                            navigator.clipboard.writeText(link);
+                                                            alert(`Copied Link for Session ${num}`);
+                                                        }
+                                                    }}
+                                                >
+                                                    {exists ? 'リンクをコピー' : '-'}
+                                                </Button>
+                                            </div>
+                                            
+                                            {exists && (
+                                                <Button 
+                                                    size="sm" 
+                                                    variant="outline"
+                                                    className="w-full text-xs"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setEditingPromptSession(session)
+                                                        setPromptText(session.grading_prompt || '')
+                                                    }}
+                                                >
+                                                    {session.grading_prompt ? 'プロンプト編集済' : 'プロンプト設定'}
+                                                </Button>
+                                            )}
                                         </div>
                                     )
                                 })}
@@ -334,6 +421,54 @@ function CourseDetailContent() {
                 </Card>
             </TabsContent>
         </Tabs>
+
+        {/* Prompt Edit Dialog (Session) */}
+        <Dialog open={!!editingPromptSession} onOpenChange={(open) => {
+            if (!open) setEditingPromptSession(null)
+        }}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>採点プロンプト設定 (第{editingPromptSession?.session_number}回)</DialogTitle>
+                    <DialogDescription>
+                        AI採点時にこのセッション固有の重点項目などを指示できます。
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <Textarea 
+                        value={promptText} 
+                        onChange={(e) => setPromptText(e.target.value)}
+                        placeholder="例: LANとWANの違いについて正しく理解しているか重点的に評価してください。"
+                        className="h-32"
+                    />
+                </div>
+                <DialogFooter>
+                    <Button onClick={handleSavePrompt}>保存</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        {/* System Prompt Edit Dialog (Course) */}
+        <Dialog open={isSystemPromptOpen} onOpenChange={setIsSystemPromptOpen}>
+            <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                    <DialogTitle>システムプロンプト設定 (コース共通)</DialogTitle>
+                    <DialogDescription>
+                        このコースの全ての採点に適用されるベースとなるプロンプトです。専門家のロール設定などを記述します。
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <Textarea 
+                        value={systemPromptText} 
+                        onChange={(e) => setSystemPromptText(e.target.value)}
+                        placeholder="例: あなたはネットワークの専門家です..."
+                        className="h-64"
+                    />
+                </div>
+                <DialogFooter>
+                    <Button onClick={handleSaveSystemPrompt}>保存</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
   )
 }

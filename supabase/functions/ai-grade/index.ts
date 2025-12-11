@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     // 1. Get Submission
     const { data: submission, error: subError } = await supabase
         .from('submissions')
-        .select('*, sessions(title, course_id)')
+        .select('*, sessions(title, course_id, grading_prompt)')
         .eq('id', submission_id)
         .single();
     
@@ -61,8 +61,31 @@ Deno.serve(async (req) => {
       console.log('Using extracted report_text from database. Length:', content.length);
     }
 
-    // 3. Get session title
-    const sessionTitle = submission.sessions?.title || "課題";
+    // 3. Get session info
+    const session = submission.sessions;
+    const sessionTitle = session?.title || "課題";
+    const gradingPrompt = session?.grading_prompt || "";
+
+    // Get Course System Prompt
+    // Note: session contains course_id, we could fetch course, but let's try to get it via join if not already available.
+    // However, the current query selects `sessions(title, course_id, grading_prompt)`. 
+    // We need to fetch the course system_prompt.
+    
+    // Let's optimize: Fetch course system prompt separately or update the join if possible.
+    // Supabase nested select limit might apply, but let's try.
+    // Actually, distinct query is safer since we have course_id from session.
+    
+    let systemPrompt = "";
+    if (session?.course_id) {
+        const { data: courseData } = await supabase
+            .from('courses')
+            .select('system_prompt')
+            .eq('course_id', session.course_id)
+            .single();
+        if (courseData?.system_prompt) {
+            systemPrompt = courseData.system_prompt;
+        }
+    }
 
     // 4. Call Gemini
     if (!geminiKey) throw new Error("GEMINI_API_KEYが設定されていません");
@@ -71,6 +94,9 @@ Deno.serve(async (req) => {
 あなたは大学の教授です。以下のレポートを採点してください。
 
 課題: 「${sessionTitle}」
+
+${systemPrompt ? `\n=== ベース評価基準 (全回共通) ===\n${systemPrompt}\n` : ''}
+${gradingPrompt ? `\n=== 今回の特別指示 (採点重点項目) ===\n${gradingPrompt}\n` : ''}
 
 === 提出レポート情報 ===
 ファイル名: ${fileName}
