@@ -74,8 +74,6 @@ export function StudentProgressModal({ student, sessions, courseId }: StudentPro
     // Prepare data: Map sessions to submissions
     const progressData = sessions.map(session => {
         // Find latest submission for this session
-        // (Assuming multiple submissions might exist, usually we want the latest or approved one)
-        // Here we just take the one that exists, or the latest if multiple (though DB constrain might allow many)
         const sessionSubmissions = submissions.filter(s => s.session_id === session.session_id)
         // Sort by submitted_at desc
         sessionSubmissions.sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime())
@@ -89,15 +87,24 @@ export function StudentProgressModal({ student, sessions, courseId }: StudentPro
     })
 
     const handleEmailClick = () => {
-         // Logic to open email modal? 
-         // For now, maybe just expose a button that calls a parent handler or just alerts
-         // The user requirement said "Mail creation also possible from here"
-         // To stay simple, we might just re-implement the email logic or accept a callback?
-         // Let's rely on the parent page to handle email if possible, or just add a simple mailto for now
-         // Actually, let's keep it simple: Just show status first. 
-         // The prompt says "Button to create mail inside this confirmation screen".
-         // I'll add a 'mailto' button for now or a placeholder.
-         window.location.href = `mailto:${student.email}?subject=レポート提出状況の確認&body=${student.name} さん%0D%0A%0D%0A現在のレポート提出状況について確認のご連絡です。`
+         let body = `${student.name} さん\n\n現在のレポート提出状況をお知らせします。\n\n`;
+         
+         progressData.forEach(item => {
+             const statusText = item.status === 'approved' ? '承認済み' 
+                 : item.status === 'ai_graded' ? '確認中'
+                 : item.status === 'pending' ? '採点中'
+                 : item.status === 'rejected' ? '再提出'
+                 : '未提出';
+             
+             const scoreText = item.submission?.score !== undefined ? ` / ${item.submission.score}点` : '';
+             const dateText = item.submission ? ` (${new Date(item.submission.submitted_at).toLocaleDateString()})` : '';
+
+             body += `第${item.session.session_number}回 ${item.session.title}: 【${statusText}】${scoreText}${dateText}\n`;
+         });
+
+         body += `\nご確認のほど、よろしくお願いいたします。`;
+
+         window.location.href = `mailto:${student.email}?subject=レポート提出状況のお知らせ&body=${encodeURIComponent(body)}`
     }
 
     return (
@@ -114,7 +121,7 @@ export function StudentProgressModal({ student, sessions, courseId }: StudentPro
                 
                 <div className="flex justify-end mb-2">
                      <Button size="sm" variant="outline" onClick={handleEmailClick}>
-                        📧 メール作成 (メーラー起動)
+                        📧 レポート状況送信
                      </Button>
                 </div>
 
