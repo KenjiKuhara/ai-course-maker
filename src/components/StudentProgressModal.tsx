@@ -71,6 +71,8 @@ export function StudentProgressModal({ student, sessions, courseId }: StudentPro
         }
     }
 
+    const [sending, setSending] = useState(false)
+
     // Prepare data: Map sessions to submissions
     const progressData = sessions.map(session => {
         // Find latest submission for this session
@@ -86,24 +88,33 @@ export function StudentProgressModal({ student, sessions, courseId }: StudentPro
         }
     })
 
-    const handleEmailClick = () => {
-         let body = `${student.name} さん\n\n現在のレポート提出状況をお知らせします。\n\n`;
-         
-         progressData.forEach(item => {
-             const statusText = item.status === 'approved' ? '承認済み' 
-                 : item.status === 'ai_graded' ? '確認中'
-                 : item.status === 'pending' ? '採点中'
-                 : item.status === 'rejected' ? '再提出'
-                 : '未提出';
+    const handleEmailClick = async () => {
+         if (!confirm(`${student.name} さんに、現在のレポート状況をメールで送信しますか？`)) return;
+
+         setSending(true);
+         try {
+             // Use the same Edge Function as bulk email for consistency
+             const { data, error } = await supabase.functions.invoke('send-bulk-email', {
+                 body: { 
+                    course_id: courseId,
+                    student_id: student.student_id 
+                 }
+             });
+
+             if (error) throw error;
              
-             const dateText = item.submission ? ` (${new Date(item.submission.submitted_at).toLocaleDateString()})` : '';
+             if (data.sent > 0) {
+                 alert('送信しました。');
+             } else {
+                 alert(`送信失敗: ${data.errors?.join(', ') || '不明なエラー'}`);
+             }
 
-             body += `第${item.session.session_number}回 ${item.session.title}: 【${statusText}】${dateText}\n`;
-         });
-
-         body += `\nご確認のほど、よろしくお願いいたします。`;
-
-         window.location.href = `mailto:${student.email}?subject=レポート提出状況のお知らせ&body=${encodeURIComponent(body)}`
+         } catch (e: any) {
+             console.error(e);
+             alert('送信エラー: ' + e.message);
+         } finally {
+             setSending(false);
+         }
     }
 
     return (
@@ -119,8 +130,8 @@ export function StudentProgressModal({ student, sessions, courseId }: StudentPro
                 </DialogHeader>
                 
                 <div className="flex justify-end mb-2">
-                     <Button size="sm" variant="outline" onClick={handleEmailClick}>
-                        📧 レポート状況送信
+                     <Button size="sm" variant="outline" onClick={handleEmailClick} disabled={sending}>
+                        {sending ? '送信中...' : '📧 レポート状況送信'}
                      </Button>
                 </div>
 
