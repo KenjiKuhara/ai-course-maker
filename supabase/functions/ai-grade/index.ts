@@ -109,7 +109,17 @@ ${content.substring(0, 15000)}
 - 抽出されたテキストが意味を成している場合のみ、内容に基づいて採点してください。
 
 JSON形式で回答:
-{"score": 数値(0-100), "feedback": "日本語フィードバック"}
+{
+  "score": 数値(0-100),
+  "feedback_data": {
+    "summary": "総評（学生への励ましや全体的な感想）",
+    "details": {
+      "観点1（例えば内容の正確性）": "コメント",
+      "観点2（例えば論理性）": "コメント"
+    },
+    "advice": "今後のための具体的な改善アドバイス"
+  }
+}
 `;
 
     console.log('Calling Gemini API (gemini-2.0-flash)...')
@@ -135,7 +145,16 @@ JSON形式で回答:
     const resultText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!resultText) throw new Error("Geminiからの応答が無効な形式です");
     
-    const result = JSON.parse(resultText);
+    // Clean up markdown code blocks if present (e.g. ```json ... ```)
+    const cleanedText = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let result;
+    try {
+        result = JSON.parse(cleanedText);
+    } catch (e) {
+        console.error("JSON Parse Error. Raw text:", resultText);
+        throw new Error("AIからの回答を解析できませんでした。");
+    }
     console.log('Parsed result:', result)
 
     // 5. Update Submission
@@ -143,8 +162,9 @@ JSON形式で回答:
         .from('submissions')
         .update({
             score: result.score,
-            ai_feedback: result.feedback,
-            status: 'ai_graded'
+            ai_feedback: JSON.stringify(result.feedback_data),
+            status: 'ai_graded',
+            executed_prompt: prompt
         })
         .eq('id', submission_id);
 

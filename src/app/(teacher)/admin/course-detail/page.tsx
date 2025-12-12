@@ -41,6 +41,15 @@ function CourseDetailContent() {
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false)
   const [systemPromptText, setSystemPromptText] = useState('')
 
+  // Bulk Email State
+  const [sendingEmail, setSendingEmail] = useState(false)
+
+  // Session Management State
+  const [sessionCount, setSessionCount] = useState(5)
+
+  // Tab State
+  const [activeTab, setActiveTab] = useState('students')
+
   useEffect(() => {
     if (courseId) fetchCourseData()
   }, [courseId])
@@ -67,6 +76,7 @@ function CourseDetailContent() {
         // Transform data to flat structure including status
         const studentsData = enrollments.map((item: any) => ({
             ...item.students,
+            enrollment: item, // Store full enrollment object for logs
             enrollment_status: item.status // 'active' or 'dropped'
         }))
         setStudents(studentsData)
@@ -170,6 +180,52 @@ function CourseDetailContent() {
       }
   }
 
+  const handleBulkEmail = async () => {
+    if (!confirm("履修学生全員（Activeのみ）に、現在のレポート未提出状況を通知するメールを一斉送信します。\nよろしいですか？")) return;
+
+    setSendingEmail(true)
+    try {
+        const { data, error } = await supabase.functions.invoke('send-bulk-email', {
+            body: { course_id: courseId }
+        })
+
+        if (error) throw error;
+        
+        alert(`送信完了しました。\n成功: ${data.sent}件\n失敗: ${data.errors?.length || 0}件\n${data.errors?.join('\n') || ''}`);
+        fetchCourseData(); // Refresh to show last sent logs
+    } catch (e: any) {
+        alert('送信エラー: ' + e.message);
+        console.error(e);
+    } finally {
+        setSendingEmail(false);
+    }
+  }
+
+  const handleIndividualEmail = async (studentId: string, studentName: string) => {
+    if (!confirm(`${studentName} さんに、現在のレポート未提出状況を通知するメールを送信しますか？`)) return;
+
+    setSendingEmail(true)
+    try {
+        const { data, error } = await supabase.functions.invoke('send-bulk-email', {
+            body: { course_id: courseId, student_id: studentId }
+        })
+
+        if (error) throw error;
+        
+        if (data.sent > 0) {
+            alert(`${studentName} さんへの送信が完了しました。`);
+        } else {
+            alert(`送信に失敗しました: ${data.errors?.join(', ') || '不明なエラー'}`);
+        }
+        fetchCourseData(); // Refresh
+    } catch (e: any) {
+        alert('送信エラー: ' + e.message);
+        console.error(e);
+    } finally {
+        setSendingEmail(false);
+    }
+  }
+
     // Smart Term Display
   const getTermLabel = (term: string) => {
       if (term === 'Spring') return '前期'
@@ -222,7 +278,7 @@ function CourseDetailContent() {
             </div>
         </div>
 
-        <Tabs defaultValue="students" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList>
                 <TabsTrigger value="students">学生一覧 ({students.length})</TabsTrigger>
                 <TabsTrigger value="sessions">セッション管理</TabsTrigger>
@@ -230,8 +286,16 @@ function CourseDetailContent() {
             
             <TabsContent value="students">
                 <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>履修学生</CardTitle>
+                        <Button 
+                            variant="default" 
+                            className="bg-blue-600 hover:bg-blue-700"
+                            onClick={handleBulkEmail}
+                            disabled={sendingEmail}
+                        >
+                            {sendingEmail ? '送信中...' : '📧 レポート状況を一斉送信'}
+                        </Button>
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -240,6 +304,7 @@ function CourseDetailContent() {
                                     <TableHead>学籍番号</TableHead>
                                     <TableHead>氏名</TableHead>
                                     <TableHead>メールアドレス</TableHead>
+                                    <TableHead>最終通知</TableHead>
                                     <TableHead>操作</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -252,8 +317,22 @@ function CourseDetailContent() {
                                             {student.enrollment_status === 'dropped' && <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">Dropped</span>}
                                         </TableCell>
                                         <TableCell>{student.email}</TableCell>
+                                        <TableCell className="text-xs text-gray-500">
+                                            {student.enrollment?.last_email_sent_at 
+                                                ? new Date(student.enrollment.last_email_sent_at).toLocaleString() 
+                                                : '-'}
+                                        </TableCell>
                                         <TableCell>
                                             <div className="flex gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => handleIndividualEmail(student.student_id, student.name)}
+                                                    disabled={sendingEmail || student.enrollment_status === 'dropped'}
+                                                    title="このユーザーにレポート状況メールを送信"
+                                                >
+                                                    📧
+                                                </Button>
                                                 <RescueModal studentId={student.student_id} studentName={student.name} />
                                                 
                                                 <Button
@@ -314,108 +393,381 @@ function CourseDetailContent() {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-6">
-                            <div className="flex items-center gap-4">
-                                <p className="text-sm text-gray-500">
-                                    学生はここで生成されたリンクを使用してレポートを提出できます。標準の15回分のセッションを一括作成できます。
+                            <div className="flex items-center gap-4 flex-wrap">
+                                <p className="text-sm text-gray-500 flex-1 min-w-[200px]">
+                                    学生はここで生成されたリンクを使用してレポートを提出できます。必要な数だけセッションを追加・削除できます。
                                 </p>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm font-medium">追加数:</label>
+                                    <input 
+                                        type="number" 
+                                        min="1" 
+                                        max="50" 
+                                        value={sessionCount}
+                                        onChange={(e) => setSessionCount(parseInt(e.target.value) || 1)}
+                                        className="w-20 px-2 py-1 border rounded"
+                                    />
+                                </div>
                                 <Button 
-                                    variant="outline"
+                                    size="sm"
+                                    variant="default"
                                     onClick={async () => {
-                                        if (!confirm("第1回から第15回のセッションを初期化しますか？既存のセッションはスキップされます。")) return;
+                                        if (!confirm(`${sessionCount}個のセッションを追加しますか？`)) return;
                                         
-                                        const sessionsToCreate = Array.from({ length: 15 }, (_, i) => ({
+                                        console.log('Adding sessions for courseId:', courseId);
+                                        
+                                        const { data: existingSessions, error: fetchError } = await supabase
+                                            .from('sessions')
+                                            .select('session_number')
+                                            .eq('course_id', courseId)
+                                            .order('session_number', { ascending: false })
+                                            .limit(1);
+                                        
+                                        if (fetchError) {
+                                            console.error('Error fetching existing sessions:', fetchError);
+                                            alert(`既存セッション取得エラー: ${fetchError.message}`);
+                                            return;
+                                        }
+                                        
+                                        console.log('Existing sessions:', existingSessions);
+                                        const maxNum = existingSessions?.[0]?.session_number || 0;
+                                        const sessionsToCreate = Array.from({ length: sessionCount }, (_, i) => ({
                                             course_id: courseId,
-                                            session_number: i + 1,
-                                            title: `Lecture ${i + 1}`,
+                                            session_number: maxNum + i + 1,
+                                            title: `Lecture ${maxNum + i + 1}`,
                                             allow_late_submission: true
                                         }));
 
-                                        let createdCount = 0;
-                                        for (const session of sessionsToCreate) {
-                                            const { count } = await supabase
-                                                .from('sessions')
-                                                .select('*', { count: 'exact', head: true })
-                                                .eq('course_id', courseId)
-                                                .eq('session_number', session.session_number);
-                                            
-                                            if (count === 0) {
-                                                const { error } = await supabase.from('sessions').insert(session);
-                                                if (error) {
-                                                    console.error(error);
-                                                    alert(`Error creating session ${session.session_number}: ${error.message}`);
-                                                }
-                                                else createdCount++;
-                                            }
+                                        console.log('Sessions to create:', sessionsToCreate);
+                                        const { data: insertedData, error } = await supabase.from('sessions').insert(sessionsToCreate).select();
+                                        if (error) {
+                                            console.error('Insert error:', error);
+                                            alert(`エラー: ${error.message}`);
+                                        } else {
+                                            console.log('Inserted sessions:', insertedData);
+                                            alert(`${sessionCount}個のセッションを追加しました (第${maxNum + 1}回〜第${maxNum + sessionCount}回)`);
+                                            fetchCourseData();
                                         }
-                                        alert(`初期化完了\n作成: ${createdCount}件\n(スキップ: ${sessionsToCreate.length - createdCount}件)`);
-                                        fetchCourseData(); 
                                     }}
                                 >
-                                    セッション初期化 (1-15回)
+                                    ➕ セッション追加
+                                </Button>
+                                <Button 
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={async () => {
+                                        if (sessions.length === 0) {
+                                            alert('削除するセッションがありません');
+                                            return;
+                                        }
+                                        const deleteCount = Math.min(sessionCount, sessions.length);
+                                        if (!confirm(`最後の${deleteCount}個のセッションを削除しますか？\n\n⚠️ 提出済みのレポートも削除されます。`)) return;
+                                        
+                                        console.log('Deleting sessions for courseId:', courseId, 'count:', deleteCount);
+                                        
+                                        const { data: toDelete, error: fetchError } = await supabase
+                                            .from('sessions')
+                                            .select('session_id, session_number')
+                                            .eq('course_id', courseId)
+                                            .order('session_number', { ascending: false })
+                                            .limit(deleteCount);
+                                        
+                                        if (fetchError) {
+                                            console.error('Error fetching sessions to delete:', fetchError);
+                                            alert(`取得エラー: ${fetchError.message}`);
+                                            return;
+                                        }
+                                        
+                                        if (!toDelete || toDelete.length === 0) {
+                                            console.log('No sessions found to delete');
+                                            alert('削除するセッションが見つかりません');
+                                            return;
+                                        }
+
+                                        console.log('Sessions to delete:', toDelete);
+                                        const ids = toDelete.map(s => s.session_id);
+                                        console.log('Session IDs to delete:', ids);
+                                        
+                                        const { data: deletedData, error } = await supabase
+                                            .from('sessions')
+                                            .delete()
+                                            .in('session_id', ids)
+                                            .select();
+                                        
+                                        if (error) {
+                                            console.error('Delete error:', error);
+                                            alert(`削除エラー: ${error.message}`);
+                                        } else {
+                                            console.log('Deleted sessions:', deletedData);
+                                            alert(`${toDelete.length}個のセッションを削除しました`);
+                                            fetchCourseData();
+                                        }
+                                    }}
+                                >
+                                    ❌ 最後の{Math.min(sessionCount, sessions.length)}個を削除
                                 </Button>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {Array.from({ length: 15 }, (_, i) => i + 1).map((num) => {
-                                    const session = sessions.find(s => s.session_number === num);
-                                    const exists = !!session;
-                                    const link = `${window.location.origin}/submit?cid=${courseId}&snum=${num}`;
-                                    
-                                    return (
-                                        <div 
-                                            key={num} 
-                                            className={`border rounded p-3 flex flex-col gap-2 transition-colors ${exists ? 'bg-white hover:bg-gray-50' : 'bg-gray-100 opacity-70'}`}
-                                        >
-                                            <div className="flex justify-between items-center"
-                                                 onClick={() => {
-                                                    if (exists) {
-                                                        navigator.clipboard.writeText(link);
-                                                        alert(`第${num}回のリンクをコピーしました`);
-                                                    } else {
-                                                        alert(`第${num}回のセッションはまだ作成されていません。「セッション初期化」をクリックしてください。`);
-                                                    }
-                                                }}
-                                            >
-                                                <div className="flex flex-col cursor-pointer">
-                                                    <span className="font-medium text-sm">第{num}回</span>
-                                                    <span className={`text-xs ${exists ? 'text-green-600' : 'text-red-500'}`}>
-                                                        {exists ? '有効' : '未作成'}
-                                                    </span>
-                                                </div>
-                                                <Button 
-                                                    size="sm" 
-                                                    variant={exists ? "secondary" : "ghost"}
-                                                    disabled={!exists}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation(); 
-                                                        if (exists) {
-                                                            navigator.clipboard.writeText(link);
-                                                            alert(`Copied Link for Session ${num}`);
-                                                        }
-                                                    }}
-                                                >
-                                                    {exists ? 'リンクをコピー' : '-'}
-                                                </Button>
-                                            </div>
-                                            
-                                            {exists && (
-                                                <Button 
-                                                    size="sm" 
-                                                    variant="outline"
-                                                    className="w-full text-xs"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setEditingPromptSession(session)
-                                                        setPromptText(session.grading_prompt || '')
+
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-20">回数</TableHead>
+                                        <TableHead>タイトル</TableHead>
+                                        <TableHead className="w-36">日付</TableHead>
+                                        <TableHead className="w-32">プロンプト</TableHead>
+                                        <TableHead className="w-40">操作</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {sessions.map((session) => {
+                                        const link = `${window.location.origin}/submit?cid=${courseId}&snum=${session.session_number}`;
+                                        
+                                        return (
+                                            <TableRow key={session.session_id}>
+                                                <TableCell className="font-medium">第{session.session_number}回</TableCell>
+                                                <TableCell>
+                                                    <input
+                                                        type="text"
+                                                        defaultValue={session.title}
+                                                        onBlur={async (e) => {
+                                                            const newTitle = e.target.value;
+                                                            const { error } = await supabase
+                                                                .from('sessions')
+                                                                .update({ title: newTitle })
+                                                                .eq('session_id', session.session_id);
+                                                            
+                                                            if (error) {
+                                                                console.error('Save error:', error);
+                                                                alert(`保存に失敗しました: ${error.message}`);
+                                                            } else {
+                                                                // Update local state without reloading
+                                                                setSessions(prev => prev.map(s => 
+                                                                    s.session_id === session.session_id 
+                                                                        ? { ...s, title: newTitle } 
+                                                                        : s
+                                                                ));
+                                                            }
+                                                        }}
+                                                        className="w-full px-2 py-1 border rounded"
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex gap-2 items-center">
+                                                        {/* Manual Year/Month/Day Inputs */}
+                                                        <input
+                                                            id={`session-year-${session.session_id}`}
+                                                            key={`year-${session.session_id}-${session.session_date}`}
+                                                            type="number"
+                                                            placeholder="年"
+                                                            min="2000"
+                                                            max="2099"
+                                                            onInput={(e) => {
+                                                                e.currentTarget.value = e.currentTarget.value.slice(0, 4);
+                                                            }}
+                                                            defaultValue={session.session_date ? new Date(session.session_date + 'T00:00:00').getFullYear() : ''}
+                                                            onBlur={async (e) => {
+                                                                const year = e.target.value;
+                                                                const monthInput = document.getElementById(`session-month-${session.session_id}`) as HTMLInputElement;
+                                                                const dayInput = document.getElementById(`session-day-${session.session_id}`) as HTMLInputElement;
+                                                                
+                                                                const month = monthInput?.value;
+                                                                const day = dayInput?.value;
+
+                                                                if (year && month && day && year.length === 4) {
+                                                                    // Date validation
+                                                                    const date = new Date(Number(year), Number(month) - 1, Number(day));
+                                                                    const isValid = date.getFullYear() === Number(year) && 
+                                                                                    date.getMonth() === Number(month) - 1 && 
+                                                                                    date.getDate() === Number(day);
+
+                                                                    if (!isValid) {
+                                                                        alert('無効な日付です。カレンダーに存在しない日付（例: 2月31日）が入力されています。');
+                                                                        return;
+                                                                    }
+
+                                                                    const newDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                                                    const { error } = await supabase.from('sessions').update({ session_date: newDate }).eq('session_id', session.session_id);
+                                                                    
+                                                                    if (error) {
+                                                                        console.error('Save error:', error);
+                                                                        alert('保存に失敗しました。もう一度お試しください。');
+                                                                    } else {
+                                                                        setSessions(prev => prev.map(s => 
+                                                                            s.session_id === session.session_id 
+                                                                                ? { ...s, session_date: newDate } 
+                                                                                : s
+                                                                        ));
+                                                                    }
+                                                                }
+                                                            }}
+                                                            className="w-16 px-2 py-1 border rounded text-center text-sm"
+                                                        />
+                                                        <span className="text-gray-400">/</span>
+                                                        <input
+                                                            id={`session-month-${session.session_id}`}
+                                                            key={`month-${session.session_id}-${session.session_date}`}
+                                                            type="number"
+                                                            placeholder="月"
+                                                            min="1"
+                                                            max="12"
+                                                            onInput={(e) => {
+                                                                e.currentTarget.value = e.currentTarget.value.slice(0, 2);
+                                                            }}
+                                                            defaultValue={session.session_date ? String(new Date(session.session_date + 'T00:00:00').getMonth() + 1).padStart(2, '0') : ''}
+                                                            onBlur={async (e) => {
+                                                                const month = e.target.value.padStart(2, '0');
+                                                                const yearInput = document.getElementById(`session-year-${session.session_id}`) as HTMLInputElement;
+                                                                const dayInput = document.getElementById(`session-day-${session.session_id}`) as HTMLInputElement;
+                                                                
+                                                                const year = yearInput?.value;
+                                                                const day = dayInput?.value;
+
+                                                                if (year && month && day && parseInt(month) >= 1 && parseInt(month) <= 12) {
+                                                                    // Date validation
+                                                                    const date = new Date(Number(year), Number(month) - 1, Number(day));
+                                                                    const isValid = date.getFullYear() === Number(year) && 
+                                                                                    date.getMonth() === Number(month) - 1 && 
+                                                                                    date.getDate() === Number(day);
+
+                                                                    if (!isValid) {
+                                                                        alert('無効な日付です。カレンダーに存在しない日付（例: 2月31日）が入力されています。');
+                                                                        return;
+                                                                    }
+
+                                                                    const newDate = `${year}-${month}-${day.padStart(2, '0')}`;
+                                                                    const { error } = await supabase.from('sessions').update({ session_date: newDate }).eq('session_id', session.session_id);
+                                                                    
+                                                                    if (error) {
+                                                                        console.error('Save error:', error);
+                                                                        alert('保存に失敗しました。もう一度お試しください。');
+                                                                    } else {
+                                                                        setSessions(prev => prev.map(s => 
+                                                                            s.session_id === session.session_id 
+                                                                                ? { ...s, session_date: newDate } 
+                                                                                : s
+                                                                        ));
+                                                                    }
+                                                                }
+                                                            }}
+                                                            className="w-12 px-2 py-1 border rounded text-center text-sm"
+                                                        />
+                                                        <span className="text-gray-400">/</span>
+                                                        <input
+                                                            id={`session-day-${session.session_id}`}
+                                                            key={`day-${session.session_id}-${session.session_date}`}
+                                                            type="number"
+                                                            placeholder="日"
+                                                            min="1"
+                                                            max="31"
+                                                            onInput={(e) => {
+                                                                e.currentTarget.value = e.currentTarget.value.slice(0, 2);
+                                                            }}
+                                                            defaultValue={session.session_date ? String(new Date(session.session_date + 'T00:00:00').getDate()).padStart(2, '0') : ''}
+                                                            onBlur={async (e) => {
+                                                                const day = e.target.value.padStart(2, '0');
+                                                                const yearInput = document.getElementById(`session-year-${session.session_id}`) as HTMLInputElement;
+                                                                const monthInput = document.getElementById(`session-month-${session.session_id}`) as HTMLInputElement;
+                                                                
+                                                                const year = yearInput?.value;
+                                                                const month = monthInput?.value;
+
+                                                                if (year && month && day && parseInt(day) >= 1 && parseInt(day) <= 31) {
+                                                                    // Date validation
+                                                                    const date = new Date(Number(year), Number(month) - 1, Number(day));
+                                                                    const isValid = date.getFullYear() === Number(year) && 
+                                                                                    date.getMonth() === Number(month) - 1 && 
+                                                                                    date.getDate() === Number(day);
+
+                                                                    if (!isValid) {
+                                                                        alert('無効な日付です。カレンダーに存在しない日付（例: 2月31日）が入力されています。');
+                                                                        return;
+                                                                    }
+
+                                                                    const newDate = `${year}-${month.padStart(2, '0')}-${day}`;
+                                                                    const { error } = await supabase.from('sessions').update({ session_date: newDate }).eq('session_id', session.session_id);
+                                                                    
+                                                                    if (error) {
+                                                                        console.error('Save error:', error);
+                                                                        alert('保存に失敗しました。もう一度お試しください。');
+                                                                    } else {
+                                                                        setSessions(prev => prev.map(s => 
+                                                                            s.session_id === session.session_id 
+                                                                                ? { ...s, session_date: newDate } 
+                                                                                : s
+                                                                        ));
+                                                                    }
+                                                                }
+                                                            }}
+                                                            className="w-12 px-2 py-1 border rounded text-center text-sm"
+                                                        />
+                                                        
+                                                        {/* Weekday Display */}
+                                                        {session.session_date && (
+                                                            <span className="text-sm text-gray-600 font-medium">
+                                                                ({['日', '月', '火', '水', '木', '金', '土'][new Date(session.session_date + 'T00:00:00').getDay()]})
+                                                            </span>
+                                                        )}
+                                                        
+                                                        {/* Calendar Picker Button */}
+                                                        <div className="relative flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded border border-gray-300 px-2 py-1 bg-white">
+                                                            <span className="text-sm text-gray-700">カレンダー</span>
+                                                            <input
+                                                                type="date"
+                                                                value={session.session_date || ''}
+                                                                onChange={async (e) => {
+                                                                    const newDate = e.target.value;
+                                                                    if (newDate) {
+                                                                        const { error } = await supabase.from('sessions').update({ session_date: newDate }).eq('session_id', session.session_id);
+                                                                        
+                                                                        if (error) {
+                                                                            console.error('Save error:', error);
+                                                                            alert('保存に失敗しました。もう一度お試しください。');
+                                                                        } else {
+                                                                            setSessions(prev => prev.map(s => 
+                                                                                s.session_id === session.session_id 
+                                                                                    ? { ...s, session_date: newDate } 
+                                                                                    : s
+                                                                            ));
+                                                                        }
+                                                                    }
+                                                                }}
+                                                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                                title="カレンダーから選択"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="text-xs"
+                                                        onClick={() => {
+                                                            setEditingPromptSession(session)
+                                                            setPromptText(session.grading_prompt || '')
                                                     }}
                                                 >
                                                     {session.grading_prompt ? 'プロンプト編集済' : 'プロンプト設定'}
                                                 </Button>
-                                            )}
-                                        </div>
-                                    )
-                                })}
-                            </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="secondary"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(link);
+                                                            alert(`第${session.session_number}回のリンクをコピーしました`);
+                                                        }}
+                                                    >
+                                                        リンクをコピー
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
                         </div>
                     </CardContent>
                 </Card>

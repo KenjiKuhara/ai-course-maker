@@ -28,6 +28,14 @@ function GradingContent() {
   // History Modal
   const [historyOpen, setHistoryOpen] = useState(false)
   const [selectedStudentHistory, setSelectedStudentHistory] = useState<any>(null)
+  
+  // Prompt Modal
+  const [promptOpen, setPromptOpen] = useState(false)
+  const [selectedPrompt, setSelectedPrompt] = useState('')
+
+  // Email Modal
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [emailText, setEmailText] = useState('')
 
   // Detail/Approval Modal
   const [detailOpen, setDetailOpen] = useState(false)
@@ -79,7 +87,7 @@ function GradingContent() {
     if (validSessionId) {
         const { data: subData } = await supabase
             .from('submissions')
-            .select('*')
+            .select('*, sessions(*)')
             .eq('session_id', validSessionId)
             .order('submitted_at', { ascending: false })
         submissions = subData || []
@@ -183,6 +191,57 @@ function GradingContent() {
     } finally {
       setActionLoading(false)
     }
+  }
+
+  // Generate Email Text
+  const generateEmail = (submission: any) => {
+    if (!submission?.latestSubmission) return
+
+    const studentName = submission.student.name;
+    const score = submission.latestSubmission.score;
+    const feedbackRaw = submission.latestSubmission.ai_feedback;
+    
+    let feedbackBody = "";
+    
+    try {
+        // Try parsing as JSON (New format)
+        const data = JSON.parse(feedbackRaw);
+        
+        feedbackBody += `【総合得点】 ${score}点\n\n`;
+        feedbackBody += `【総評】\n${data.summary}\n\n`;
+        
+        if (data.details) {
+             feedbackBody += `【詳細評価】\n`;
+             Object.entries(data.details).forEach(([key, value]) => {
+                 feedbackBody += `・${key}: ${value}\n`;
+             });
+             feedbackBody += `\n`;
+        }
+        
+        if (data.advice) {
+            feedbackBody += `【今後のアドバイス】\n${data.advice}\n`;
+        }
+        
+    } catch (e) {
+        // Fallback for old textual feedback
+        feedbackBody += `【評価結果】 ${score}点\n\n`;
+        feedbackBody += `【コメント】\n${feedbackRaw}\n`;
+    }
+
+    const emailTemplate = `件名: レポート採点結果のお知らせ
+
+${studentName} さん
+
+提出いただいたレポートの採点が完了しました。
+
+${feedbackBody}
+--------------------------------------------------
+また、次回の課題も頑張ってください。
+
+担当教員より`;
+
+    setEmailText(emailTemplate);
+    setEmailOpen(true);
   }
 
   return (
@@ -322,10 +381,60 @@ function GradingContent() {
                                 {selectedSubmission?.latestSubmission?.score ?? '-'}点
                             </span>
                             <StatusBadge status={selectedSubmission?.status || 'pending'} />
+                            {selectedSubmission?.latestSubmission?.executed_prompt && (
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => {
+                                        setSelectedPrompt(selectedSubmission.latestSubmission.executed_prompt)
+                                        setPromptOpen(true)
+                                    }}
+                                >
+                                    👀 プロンプト確認
+                                </Button>
+                            )}
+                            {selectedSubmission?.latestSubmission?.ai_feedback && (
+                                <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => generateEmail(selectedSubmission)}
+                                >
+                                    📧 メール作成
+                                </Button>
+                            )}
                         </div>
-                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                            {selectedSubmission?.latestSubmission?.ai_feedback || 'AI採点結果がありません'}
-                        </p>
+                        <div className="text-sm text-gray-700 whitespace-pre-wrap max-h-60 overflow-y-auto mt-2">
+                             {(() => {
+                                try {
+                                    const data = JSON.parse(selectedSubmission?.latestSubmission?.ai_feedback || '{}');
+                                    // If parsing succeeds and has summary/details structure
+                                    if(data.summary) {
+                                        return (
+                                            <div className="space-y-2">
+                                                <p className="font-bold">{data.summary}</p>
+                                                {data.details && (
+                                                    <div className="pl-4 border-l-2 border-blue-200">
+                                                        {Object.entries(data.details).map(([k, v]) => (
+                                                            <div key={k} className="mb-1">
+                                                                <span className="font-semibold">{k}:</span> {v as string}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {data.advice && (
+                                                    <div className="mt-2 text-blue-800 bg-blue-100 p-2 rounded">
+                                                        💡 {data.advice}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    }
+                                    return selectedSubmission?.latestSubmission?.ai_feedback;
+                                } catch (e) {
+                                    return selectedSubmission?.latestSubmission?.ai_feedback || 'AI採点結果がありません';
+                                }
+                             })()}
+                        </div>
                     </div>
 
                     {/* Teacher Override Section */}
@@ -435,6 +544,51 @@ function GradingContent() {
                         </TableBody>
                     </Table>
                 </ScrollArea>
+            </DialogContent>
+        </Dialog>
+
+        {/* Prompt Modal */}
+        <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
+            <DialogContent className="max-w-3xl max-h-[80vh]">
+                <DialogHeader>
+                    <DialogTitle>AI使用プロンプト</DialogTitle>
+                </DialogHeader>
+                <ScrollArea className="h-[60vh] w-full rounded-md border p-4 bg-muted/50">
+                    <pre className="text-sm whitespace-pre-wrap font-mono">
+                        {selectedPrompt}
+                    </pre>
+                </ScrollArea>
+                <DialogFooter>
+                    <Button onClick={() => setPromptOpen(false)}>閉じる</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        {/* Email Modal */}
+        <Dialog open={emailOpen} onOpenChange={setEmailOpen}>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>学生への通知メール（下書き）</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                    <textarea 
+                        className="w-full h-[400px] p-4 border rounded-md font-mono text-sm"
+                        value={emailText}
+                        onChange={(e) => setEmailText(e.target.value)}
+                    />
+                </div>
+                <DialogFooter>
+                     <Button 
+                        variant="default"
+                        onClick={() => {
+                            navigator.clipboard.writeText(emailText);
+                            alert("コピーしました！");
+                        }}
+                    >
+                        📋 コピーする
+                    </Button>
+                    <Button variant="outline" onClick={() => setEmailOpen(false)}>閉じる</Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     </div>

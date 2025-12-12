@@ -16,7 +16,10 @@ async function migrate() {
 
         const files = [
             'supabase/migrations/20241208000003_add_grading_prompt.sql',
-            'supabase/migrations/20241208000004_add_course_templates.sql'
+            'supabase/migrations/20241208000004_add_course_templates.sql',
+            'supabase/migrations/20241212000000_add_executed_prompt.sql',
+            'supabase/migrations/20241212000001_add_email_log.sql',
+            'supabase/migrations/20241213000000_add_session_date.sql'
         ];
 
         for (const file of files) {
