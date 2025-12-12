@@ -62,6 +62,9 @@ function CourseDetailContent() {
         .from('courses')
         .select('*')
         .eq('course_id', courseId)
+        .single()
+    setCourse(courseData)
+
     // 2. Status of Sessions
     const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions')
