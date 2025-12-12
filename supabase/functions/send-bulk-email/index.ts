@@ -65,26 +65,29 @@ Deno.serve(async (req) => {
     }
 
     // 4. Fetch Submissions
+    // Use !inner to ensure we filter submissions by course correctly
     const { data: submissions } = await supabaseClient
         .from('submissions')
-        .select('student_id, session_id, score, status, submitted_at, sessions(session_number)')
+        .select('student_id, session_id, score, status, submitted_at, sessions!inner(session_number)')
         .eq('sessions.course_id', course_id)
-        .order('submitted_at', { ascending: false }) // Get latest first primarily for simple handling
+        .order('submitted_at', { ascending: false }) 
     
-    // Group by student and keep only the latest submission per session
+    // Group by student
     const submissionsByStudent = {};
     if (submissions) {
         submissions.forEach(sub => {
             if (!submissionsByStudent[sub.student_id]) submissionsByStudent[sub.student_id] = {};
-            const key = sub.sessions.session_number;
-            // Since we ordered by submitted_at desc, the first one encountered is the latest
-            if (!submissionsByStudent[sub.student_id][key]) {
-                submissionsByStudent[sub.student_id][key] = {
-                    session_number: key,
-                    score: sub.score,
-                    status: sub.status,
-                    submitted_at: sub.submitted_at
-                };
+            // Safety check for sessions
+            if (sub.sessions) {
+                const key = sub.sessions.session_number;
+                if (!submissionsByStudent[sub.student_id][key]) {
+                    submissionsByStudent[sub.student_id][key] = {
+                        session_number: key,
+                        score: sub.score,
+                        status: sub.status,
+                        submitted_at: sub.submitted_at
+                    };
+                }
             }
         });
     }
@@ -99,7 +102,7 @@ Deno.serve(async (req) => {
         const studentCode = enrollment.student_id; 
         const studentSubmissions = submissionsByStudent[studentCode] || {};
         
-        // Generate Content similar to StudentProgressModal
+        // Generate Content
         const subject = `【重要】レポート提出状況のお知らせ (${course?.title || '授業'})`;
         let body = `${student.name} さん\n\n`;
         body += `現在のレポート提出状況をお知らせします。\n\n`;
@@ -108,17 +111,24 @@ Deno.serve(async (req) => {
             const sub = studentSubmissions[session.session_number];
             
             let statusText = '未提出';
+            let dateText = '';
+
             if (sub) {
                 statusText = sub.status === 'approved' ? '承認済み' 
                      : sub.status === 'ai_graded' ? '確認中'
                      : sub.status === 'pending' ? '採点中'
                      : sub.status === 'rejected' ? '再提出'
                      : '未提出';
+                
+                if (sub.submitted_at) {
+                    // Manual JST conversion to avoid Intl errors
+                    const d = new Date(sub.submitted_at);
+                    d.setHours(d.getHours() + 9);
+                    const dateStr = d.toISOString().split('T')[0].replace(/-/g, '/');
+                    dateText = ` (${dateStr})`;
+                }
             }
             
-            const dateText = sub ? ` (${new Date(sub.submitted_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })})` : '';
-            
-            // Format: 第1回 SessionTitle: 【Status】 (Date)
             body += `第${session.session_number}回 ${session.title}: 【${statusText}】${dateText}\n`;
         }
         
