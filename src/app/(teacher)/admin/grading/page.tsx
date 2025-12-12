@@ -148,7 +148,7 @@ function GradingContent() {
       case 'approved':
         return <Badge className="bg-green-600 hover:bg-green-700">承認済み</Badge>
       case 'rejected':
-        return <Badge variant="destructive">却下</Badge>
+        return <Badge className="bg-purple-600 hover:bg-purple-700">却下</Badge>
       case 'missing':
         return <Badge variant="destructive">未提出</Badge>
       default:
@@ -326,7 +326,7 @@ ${feedbackBody}
                         variant={filterStatus === 'rejected' ? "default" : "outline"} 
                         size="sm" 
                         onClick={() => setFilterStatus('rejected')}
-                        className={filterStatus === 'rejected' ? "bg-red-500 hover:bg-red-600 border-transparent text-white" : "text-red-500 border-red-200 hover:bg-red-50"}
+                        className={filterStatus === 'rejected' ? "bg-purple-600 hover:bg-purple-700 border-transparent text-white" : "text-purple-600 border-purple-200 hover:bg-purple-50"}
                     >
                         却下 ({counts.rejected})
                     </Button>
