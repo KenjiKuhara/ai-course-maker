@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -24,6 +24,23 @@ function GradingContent() {
   // Data for the table
   const [gradingData, setGradingData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [filterStatus, setFilterStatus] = useState<string>('all')
+
+  // Filter Counts
+  const counts = useMemo(() => {
+    const c = { all: 0, pending: 0, ai_graded: 0, approved: 0, rejected: 0, missing: 0 }
+    gradingData.forEach(item => {
+      c.all++
+      const s = item.status as keyof typeof c
+      if (c[s] !== undefined) c[s]++
+    })
+    return c
+  }, [gradingData])
+
+  const filteredData = useMemo(() => {
+    if (filterStatus === 'all') return gradingData
+    return gradingData.filter(item => item.status === filterStatus)
+  }, [gradingData, filterStatus])
 
   // History Modal
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -273,6 +290,56 @@ ${feedbackBody}
                 <CardTitle>第{selectedSessionNum}回 提出状況一覧</CardTitle>
             </CardHeader>
             <CardContent>
+                <div className="flex flex-wrap gap-2 mb-4">
+                    <Button 
+                        variant={filterStatus === 'all' ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => setFilterStatus('all')}
+                    >
+                        全て ({counts.all})
+                    </Button>
+                    <Button 
+                        variant={filterStatus === 'approved' ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => setFilterStatus('approved')}
+                        className={filterStatus === 'approved' ? "bg-green-600 hover:bg-green-700 border-transparent text-white" : "text-green-600 border-green-200 hover:bg-green-50"}
+                    >
+                        承認済み ({counts.approved})
+                    </Button>
+                    <Button 
+                        variant={filterStatus === 'ai_graded' ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => setFilterStatus('ai_graded')}
+                        className={filterStatus === 'ai_graded' ? "bg-amber-500 hover:bg-amber-600 border-transparent text-white" : "text-amber-600 border-amber-200 hover:bg-amber-50"}
+                    >
+                        AI採点中 ({counts.ai_graded})
+                    </Button>
+                    <Button 
+                        variant={filterStatus === 'pending' ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => setFilterStatus('pending')}
+                        className={filterStatus === 'pending' ? "bg-blue-500 hover:bg-blue-600 border-transparent text-white" : "text-blue-600 border-blue-200 hover:bg-blue-50"}
+                    >
+                        採点中 ({counts.pending})
+                    </Button>
+                    <Button 
+                        variant={filterStatus === 'rejected' ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => setFilterStatus('rejected')}
+                        className={filterStatus === 'rejected' ? "bg-rose-500 hover:bg-rose-600 border-transparent text-white" : "text-rose-600 border-rose-200 hover:bg-rose-50"}
+                    >
+                        却下 ({counts.rejected})
+                    </Button>
+                     <Button 
+                        variant={filterStatus === 'missing' ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => setFilterStatus('missing')}
+                        className={filterStatus === 'missing' ? "bg-slate-500 hover:bg-slate-600 border-transparent text-white" : "text-slate-600 border-slate-200 hover:bg-slate-50"}
+                    >
+                        未提出 ({counts.missing})
+                    </Button>
+                </div>
+
                 <Table>
                     <TableHeader>
                         <TableRow>
@@ -288,7 +355,9 @@ ${feedbackBody}
                     <TableBody>
                         {loading ? (
                             <TableRow><TableCell colSpan={7} className="text-center">読み込み中...</TableCell></TableRow>
-                        ) : gradingData.map((item) => (
+                        ) : filteredData.length === 0 ? (
+                            <TableRow><TableCell colSpan={7} className="text-center text-gray-500 py-8">該当するデータはありません</TableCell></TableRow>
+                        ) : filteredData.map((item) => (
                             <TableRow key={item.student.student_id} className={item.enrollment.status === 'dropped' ? 'opacity-50 bg-gray-50' : ''}>
                                 <TableCell className="font-medium">{item.student.student_id}</TableCell>
                                 <TableCell>
