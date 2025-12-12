@@ -326,12 +326,12 @@ function CourseDetailContent() {
                                             <div className="flex gap-2">
                                                 <Button
                                                     size="sm"
-                                                    variant="ghost"
+                                                    variant="outline"
                                                     onClick={() => handleIndividualEmail(student.student_id, student.name)}
                                                     disabled={sendingEmail || student.enrollment_status === 'dropped'}
                                                     title="このユーザーにレポート状況メールを送信"
                                                 >
-                                                    📧
+                                                    📧 レポート状況送信
                                                 </Button>
                                                 <RescueModal studentId={student.student_id} studentName={student.name} />
                                                 
