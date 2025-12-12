@@ -710,8 +710,8 @@ function CourseDetailContent() {
                                                         )}
                                                         
                                                         {/* Calendar Picker Button */}
-                                                        <div className="relative flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded border border-gray-300 px-2 py-1 bg-white">
-                                                            <span className="text-sm text-gray-700">カレンダー</span>
+                                                        <div className="relative w-8 h-8 flex items-center justify-center cursor-pointer hover:bg-gray-100 rounded">
+                                                            <span className="text-xl">📅</span>
                                                             <input
                                                                 type="date"
                                                                 value={session.session_date || ''}
