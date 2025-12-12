@@ -49,6 +49,7 @@ function CourseDetailContent() {
 
   // Tab State
   const [activeTab, setActiveTab] = useState('students')
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'student_id', direction: 'asc' })
 
   useEffect(() => {
     if (courseId) fetchCourseData()
@@ -61,28 +62,7 @@ function CourseDetailContent() {
         .from('courses')
         .select('*')
         .eq('course_id', courseId)
-        .single()
-    setCourse(courseData)
-
-    // 2. Students (via Enrollments)
-    const { data: enrollments, error: enrollError } = await supabase
-        .from('enrollments')
-        .select('*, students(*)')
-        .eq('course_id', courseId)
-    
-    if (enrollError) console.error("Error fetching enrollments", enrollError);
-
-    if (enrollments) {
-        // Transform data to flat structure including status
-        const studentsData = enrollments.map((item: any) => ({
-            ...item.students,
-            enrollment: item, // Store full enrollment object for logs
-            enrollment_status: item.status // 'active' or 'dropped'
-        }))
-        setStudents(studentsData)
-    }
-
-    // 3. Status of Sessions
+    // 2. Status of Sessions
     const { data: sessionsData, error: sessionsError } = await supabase
         .from('sessions')
         .select('*')
@@ -94,8 +74,66 @@ function CourseDetailContent() {
         setSessions(sessionsData);
     }
 
+    // 3. Get Submissions for counting (using session_ids)
+    let submissionCounts: any = {};
+    if (sessionsData && sessionsData.length > 0) {
+        const sessionIds = sessionsData.map((s: any) => s.session_id);
+        const { data: submissionsData } = await supabase
+            .from('submissions')
+            .select('student_id')
+            .in('session_id', sessionIds) // Filter by session IDs belonging to this course
+        
+        submissionCounts = (submissionsData || []).reduce((acc: any, curr: any) => {
+            acc[curr.student_id] = (acc[curr.student_id] || 0) + 1;
+            return acc;
+        }, {});
+    }
+
+    // 4. Students (via Enrollments)
+    const { data: enrollments, error: enrollError } = await supabase
+        .from('enrollments')
+        .select('*, students(*)')
+        .eq('course_id', courseId)
+    
+    if (enrollError) console.error("Error fetching enrollments", enrollError);
+
+    if (enrollments) {
+        // Transform data to flat structure including status & submission count
+        const studentsData = enrollments.map((item: any) => ({
+            ...item.students,
+            enrollment: item, // Store full enrollment object for logs
+            enrollment_status: item.status, // 'active' or 'dropped'
+            submission_count: submissionCounts[item.students.student_id] || 0
+        }))
+        setStudents(studentsData)
+    }
+
     setLoading(false)
   }
+
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+        direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedStudents = [...students].sort((a, b) => {
+    if (sortConfig.key === 'submission_count') {
+         // Number sort
+         if (Number(a[sortConfig.key]) < Number(b[sortConfig.key])) return sortConfig.direction === 'asc' ? -1 : 1;
+         if (Number(a[sortConfig.key]) > Number(b[sortConfig.key])) return sortConfig.direction === 'asc' ? 1 : -1;
+         return 0;
+    }
+    // String sort (default)
+    const valA = String(a[sortConfig.key] || '').toLowerCase();
+    const valB = String(b[sortConfig.key] || '').toLowerCase();
+    
+    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -301,15 +339,26 @@ function CourseDetailContent() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>学籍番号</TableHead>
-                                    <TableHead>氏名</TableHead>
-                                    <TableHead>メールアドレス</TableHead>
-                                    <TableHead>最終通知</TableHead>
+                                    <TableHead onClick={() => handleSort('student_id')} className="cursor-pointer hover:bg-gray-50">
+                                        学籍番号 {sortConfig.key === 'student_id' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+                                    </TableHead>
+                                    <TableHead onClick={() => handleSort('name')} className="cursor-pointer hover:bg-gray-50">
+                                        氏名 {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+                                    </TableHead>
+                                    <TableHead onClick={() => handleSort('email')} className="cursor-pointer hover:bg-gray-50">
+                                        メールアドレス {sortConfig.key === 'email' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+                                    </TableHead>
+                                    <TableHead onClick={() => handleSort('date')} className="cursor-pointer hover:bg-gray-50">
+                                        最終通知
+                                    </TableHead>
+                                    <TableHead onClick={() => handleSort('submission_count')} className="cursor-pointer hover:bg-gray-50">
+                                        提出数 {sortConfig.key === 'submission_count' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+                                    </TableHead>
                                     <TableHead>操作</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {students.map((student) => (
+                                {sortedStudents.map((student) => (
                                     <TableRow key={student.student_id} className={student.enrollment_status === 'dropped' ? 'bg-gray-100 text-gray-400' : ''}>
                                         <TableCell className="font-medium">{student.student_id}</TableCell>
                                         <TableCell>
@@ -321,6 +370,9 @@ function CourseDetailContent() {
                                             {student.enrollment?.last_email_sent_at 
                                                 ? new Date(student.enrollment.last_email_sent_at).toLocaleString() 
                                                 : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-center font-medium">
+                                            {student.submission_count}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex gap-2">
