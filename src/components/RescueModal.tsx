@@ -33,13 +33,13 @@ export function RescueModal({ studentId, studentName }: { studentId: string, stu
         if (open) fetchKey()
     }}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">👁️ 救済キー</Button>
+        <Button variant="outline" size="sm">🔑 パスワード</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{studentName} さんの救済キー</DialogTitle>
+          <DialogTitle>{studentName} さんのパスワード</DialogTitle>
           <DialogDescription>
-            学生にこのキーを提示して、即時ログインを許可してください。
+            学生にこのパスワードを提示して、即時ログインを許可してください。
           </DialogDescription>
         </DialogHeader>
         
