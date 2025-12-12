@@ -83,11 +83,22 @@ function CourseDetailContent() {
         const sessionIds = sessionsData.map((s: any) => s.session_id);
         const { data: submissionsData } = await supabase
             .from('submissions')
-            .select('student_id')
-            .in('session_id', sessionIds) // Filter by session IDs belonging to this course
+            .select('student_id, session_id') // Fetch session_id for uniqueness check
+            .in('session_id', sessionIds) 
         
-        submissionCounts = (submissionsData || []).reduce((acc: any, curr: any) => {
-            acc[curr.student_id] = (acc[curr.student_id] || 0) + 1;
+        // Count unique sessions submitted per student
+        const uniqueSubmissions = (submissionsData || []).reduce((acc: any, curr: any) => {
+            if (!acc[curr.student_id]) {
+                acc[curr.student_id] = new Set();
+            }
+            if (curr.session_id) {
+                acc[curr.student_id].add(curr.session_id);
+            }
+            return acc;
+        }, {});
+
+        submissionCounts = Object.keys(uniqueSubmissions).reduce((acc: any, studentId: string) => {
+            acc[studentId] = uniqueSubmissions[studentId].size;
             return acc;
         }, {});
     }
