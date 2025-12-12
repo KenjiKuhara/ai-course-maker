@@ -67,19 +67,24 @@ Deno.serve(async (req) => {
     // 4. Fetch Submissions
     const { data: submissions } = await supabaseClient
         .from('submissions')
-        .select('student_id, session_id, score, status, sessions(session_number)')
+        .select('student_id, session_id, score, status, submitted_at, sessions(session_number)')
         .eq('sessions.course_id', course_id)
+        .order('submitted_at', { ascending: false }) // Get latest first primarily for simple handling
     
+    // Group by student and keep only the latest submission per session
     const submissionsByStudent = {};
     if (submissions) {
         submissions.forEach(sub => {
-            if (!submissionsByStudent[sub.student_id]) submissionsByStudent[sub.student_id] = [];
-            if (sub.sessions) {
-                submissionsByStudent[sub.student_id].push({
-                    session_number: sub.sessions.session_number,
+            if (!submissionsByStudent[sub.student_id]) submissionsByStudent[sub.student_id] = {};
+            const key = sub.sessions.session_number;
+            // Since we ordered by submitted_at desc, the first one encountered is the latest
+            if (!submissionsByStudent[sub.student_id][key]) {
+                submissionsByStudent[sub.student_id][key] = {
+                    session_number: key,
                     score: sub.score,
-                    status: sub.status
-                });
+                    status: sub.status,
+                    submitted_at: sub.submitted_at
+                };
             }
         });
     }
@@ -91,34 +96,33 @@ Deno.serve(async (req) => {
     for (const enrollment of enrollments) {
         const student = enrollment.students;
         if (!student.email) continue;
-        const studentCode = enrollment.student_id; // Use enrollment's student_id, not nested student object
-        const studentSubmissions = submissionsByStudent[studentCode] || [];
+        const studentCode = enrollment.student_id; 
+        const studentSubmissions = submissionsByStudent[studentCode] || {};
         
-        const missingSessions = [];
-        for (const session of sessions) {
-            const sub = studentSubmissions.find(s => s.session_number === session.session_number);
-            if (!sub || (sub.status !== 'pending' && sub.status !== 'ai_graded' && sub.status !== 'approved')) {
-                 // Condition check: actually we want to list MISSING ones.
-                 // If sub exists and has status 'pending/ai_graded/approved', it is SUBMITTED.
-                 // So if !sub OR status is rejected/missing...
-                 if (!sub || sub.status === 'missing' || sub.status === 'rejected') {
-                     missingSessions.push(`第${session.session_number}回: ${session.title}`);
-                 }
-            }
-        }
-        
-        // Generate Content
+        // Generate Content similar to StudentProgressModal
         const subject = `【重要】レポート提出状況のお知らせ (${course?.title || '授業'})`;
         let body = `${student.name} さん\n\n`;
         body += `現在のレポート提出状況をお知らせします。\n\n`;
         
-        if (missingSessions.length > 0) {
-            body += `⚠️ 以下の回が「未提出」または「却下」状態です。\n`;
-            missingSessions.forEach(s => body += `  - ${s}\n`);
-            body += `\n早急に提出を確認してください。\n\n`;
-        } else {
-            body += `✅ 現在までの課題はすべて提出されています。素晴らしいです！\n\n`;
+        for (const session of sessions) {
+            const sub = studentSubmissions[session.session_number];
+            
+            let statusText = '未提出';
+            if (sub) {
+                statusText = sub.status === 'approved' ? '承認済み' 
+                     : sub.status === 'ai_graded' ? '確認中'
+                     : sub.status === 'pending' ? '採点中'
+                     : sub.status === 'rejected' ? '再提出'
+                     : '未提出';
+            }
+            
+            const dateText = sub ? ` (${new Date(sub.submitted_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })})` : '';
+            
+            // Format: 第1回 SessionTitle: 【Status】 (Date)
+            body += `第${session.session_number}回 ${session.title}: 【${statusText}】${dateText}\n`;
         }
+        
+        body += `\nご確認のほど、よろしくお願いいたします。\n`;
         body += `--------------------------------------------------\n`;
         body += `※本メールは自動送信されています。\n`;
 
