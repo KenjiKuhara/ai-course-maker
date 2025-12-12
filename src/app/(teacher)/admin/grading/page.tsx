@@ -302,7 +302,7 @@ ${feedbackBody}
                         variant={filterStatus === 'approved' ? "default" : "outline"} 
                         size="sm" 
                         onClick={() => setFilterStatus('approved')}
-                        className={filterStatus === 'approved' ? "bg-green-600 hover:bg-green-700 border-transparent text-white" : "text-green-600 border-green-200 hover:bg-green-50"}
+                        className={filterStatus === 'approved' ? "bg-green-500 hover:bg-green-600 border-transparent text-white" : "text-green-600 border-green-200 hover:bg-green-50"}
                     >
                         承認済み ({counts.approved})
                     </Button>
@@ -320,13 +320,13 @@ ${feedbackBody}
                         onClick={() => setFilterStatus('pending')}
                         className={filterStatus === 'pending' ? "bg-blue-500 hover:bg-blue-600 border-transparent text-white" : "text-blue-600 border-blue-200 hover:bg-blue-50"}
                     >
-                        採点中 ({counts.pending})
+                        確認待ち ({counts.pending})
                     </Button>
                     <Button 
                         variant={filterStatus === 'rejected' ? "default" : "outline"} 
                         size="sm" 
                         onClick={() => setFilterStatus('rejected')}
-                        className={filterStatus === 'rejected' ? "bg-rose-500 hover:bg-rose-600 border-transparent text-white" : "text-rose-600 border-rose-200 hover:bg-rose-50"}
+                        className={filterStatus === 'rejected' ? "bg-red-500 hover:bg-red-600 border-transparent text-white" : "text-red-500 border-red-200 hover:bg-red-50"}
                     >
                         却下 ({counts.rejected})
                     </Button>
@@ -334,7 +334,7 @@ ${feedbackBody}
                         variant={filterStatus === 'missing' ? "default" : "outline"} 
                         size="sm" 
                         onClick={() => setFilterStatus('missing')}
-                        className={filterStatus === 'missing' ? "bg-slate-500 hover:bg-slate-600 border-transparent text-white" : "text-slate-600 border-slate-200 hover:bg-slate-50"}
+                        className={filterStatus === 'missing' ? "bg-red-500 hover:bg-red-600 border-transparent text-white" : "text-red-500 border-red-200 hover:bg-red-50"}
                     >
                         未提出 ({counts.missing})
                     </Button>

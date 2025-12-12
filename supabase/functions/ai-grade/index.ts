@@ -37,7 +37,8 @@ Deno.serve(async (req) => {
     // 2. Get Content (Prioritize report_text)
     let content = submission.report_text || "";
     const filePath = submission.file_url;
-    const fileName = submission.original_filename?.toLowerCase() || filePath.toLowerCase();
+    // Safe access to file name
+    const fileName = submission.original_filename?.toLowerCase() || (filePath ? filePath.toLowerCase() : "");
     
     if (!content && filePath) {
       console.log('No report_text found, attempting download fallback...')
@@ -49,14 +50,21 @@ Deno.serve(async (req) => {
       if (downloadError) {
         content = "ファイルダウンロードエラー: " + downloadError.message;
       } else if (fileData) {
-        const arrayBuffer = await fileData.arrayBuffer();
-        if (fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.csv') || fileName.endsWith('.json')) {
-           const decoder = new TextDecoder('utf-8');
-           content = decoder.decode(arrayBuffer).substring(0, 20000);
-        } else {
-           content = "【システム注記】この提出は古い方式で行われたか、テキスト抽出に失敗しました。PDFまたはWordファイルの場合は、テキスト抽出が行われていないためAIは内容を読めません。";
+        try {
+            const arrayBuffer = await fileData.arrayBuffer();
+            if (fileName.endsWith('.txt') || fileName.endsWith('.md') || fileName.endsWith('.csv') || fileName.endsWith('.json')) {
+               const decoder = new TextDecoder('utf-8');
+               content = decoder.decode(arrayBuffer).substring(0, 20000);
+            } else {
+               content = "【システム注記】この提出は古い方式で行われたか、テキスト抽出に失敗しました。PDFまたはWordファイルの場合は、テキスト抽出が行われていないためAIは内容を読めません。";
+            }
+        } catch (e: any) {
+             console.error('File read error:', e);
+             content = "ファイル読み込みエラー: " + e.message;
         }
       }
+    } else if (!content) {
+        console.log('No content and no file path');
     } else {
       console.log('Using extracted report_text from database. Length:', content.length);
     }
