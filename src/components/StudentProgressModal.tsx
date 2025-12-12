@@ -96,10 +96,9 @@ export function StudentProgressModal({ student, sessions, courseId }: StudentPro
                  : item.status === 'rejected' ? '再提出'
                  : '未提出';
              
-             const scoreText = item.submission?.score !== undefined ? ` / ${item.submission.score}点` : '';
              const dateText = item.submission ? ` (${new Date(item.submission.submitted_at).toLocaleDateString()})` : '';
 
-             body += `第${item.session.session_number}回 ${item.session.title}: 【${statusText}】${scoreText}${dateText}\n`;
+             body += `第${item.session.session_number}回 ${item.session.title}: 【${statusText}】${dateText}\n`;
          });
 
          body += `\nご確認のほど、よろしくお願いいたします。`;
