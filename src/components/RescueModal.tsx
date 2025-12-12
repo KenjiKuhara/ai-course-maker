@@ -49,7 +49,7 @@ export function RescueModal({ studentId, studentName }: { studentId: string, stu
             
             {key && (
                 <>
-                    <div className="text-3xl font-mono bg-gray-100 p-4 rounded border select-all">
+                    <div className="text-xl font-mono bg-gray-100 p-4 rounded border select-all break-all text-center">
                         {key}
                     </div>
                     <div className="p-4 bg-white border rounded shadow-sm">
