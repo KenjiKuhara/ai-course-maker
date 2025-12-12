@@ -307,12 +307,12 @@ ${feedbackBody}
                         承認済み ({counts.approved})
                     </Button>
                     <Button 
-                        variant={filterStatus === 'pending' ? "default" : "outline"} 
+                        variant={filterStatus === 'rejected' ? "default" : "outline"} 
                         size="sm" 
-                        onClick={() => setFilterStatus('pending')}
-                        className={filterStatus === 'pending' ? "bg-yellow-500 hover:bg-yellow-600 border-transparent text-white" : "text-yellow-600 border-yellow-200 hover:bg-yellow-50"}
+                        onClick={() => setFilterStatus('rejected')}
+                        className={filterStatus === 'rejected' ? "bg-purple-600 hover:bg-purple-700 border-transparent text-white" : "text-purple-600 border-purple-200 hover:bg-purple-50"}
                     >
-                        AI採点中 ({counts.pending})
+                        却下 ({counts.rejected})
                     </Button>
                     <Button 
                         variant={filterStatus === 'ai_graded' ? "default" : "outline"} 
@@ -323,12 +323,12 @@ ${feedbackBody}
                         確認待ち ({counts.ai_graded})
                     </Button>
                     <Button 
-                        variant={filterStatus === 'rejected' ? "default" : "outline"} 
+                        variant={filterStatus === 'pending' ? "default" : "outline"} 
                         size="sm" 
-                        onClick={() => setFilterStatus('rejected')}
-                        className={filterStatus === 'rejected' ? "bg-purple-600 hover:bg-purple-700 border-transparent text-white" : "text-purple-600 border-purple-200 hover:bg-purple-50"}
+                        onClick={() => setFilterStatus('pending')}
+                        className={filterStatus === 'pending' ? "bg-yellow-500 hover:bg-yellow-600 border-transparent text-white" : "text-yellow-600 border-yellow-200 hover:bg-yellow-50"}
                     >
-                        却下 ({counts.rejected})
+                        AI採点中 ({counts.pending})
                     </Button>
                      <Button 
                         variant={filterStatus === 'missing' ? "default" : "outline"} 
