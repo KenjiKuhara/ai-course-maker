@@ -307,20 +307,20 @@ ${feedbackBody}
                         承認済み ({counts.approved})
                     </Button>
                     <Button 
-                        variant={filterStatus === 'ai_graded' ? "default" : "outline"} 
-                        size="sm" 
-                        onClick={() => setFilterStatus('ai_graded')}
-                        className={filterStatus === 'ai_graded' ? "bg-amber-500 hover:bg-amber-600 border-transparent text-white" : "text-amber-600 border-amber-200 hover:bg-amber-50"}
-                    >
-                        AI採点中 ({counts.ai_graded})
-                    </Button>
-                    <Button 
                         variant={filterStatus === 'pending' ? "default" : "outline"} 
                         size="sm" 
                         onClick={() => setFilterStatus('pending')}
-                        className={filterStatus === 'pending' ? "bg-blue-500 hover:bg-blue-600 border-transparent text-white" : "text-blue-600 border-blue-200 hover:bg-blue-50"}
+                        className={filterStatus === 'pending' ? "bg-yellow-500 hover:bg-yellow-600 border-transparent text-white" : "text-yellow-600 border-yellow-200 hover:bg-yellow-50"}
                     >
-                        確認待ち ({counts.pending})
+                        AI採点中 ({counts.pending})
+                    </Button>
+                    <Button 
+                        variant={filterStatus === 'ai_graded' ? "default" : "outline"} 
+                        size="sm" 
+                        onClick={() => setFilterStatus('ai_graded')}
+                        className={filterStatus === 'ai_graded' ? "bg-blue-500 hover:bg-blue-600 border-transparent text-white" : "text-blue-600 border-blue-200 hover:bg-blue-50"}
+                    >
+                        確認待ち ({counts.ai_graded})
                     </Button>
                     <Button 
                         variant={filterStatus === 'rejected' ? "default" : "outline"} 
