@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const geminiKey = Deno.env.get('GEMINI_API_KEY')
+    const geminiKey = Deno.env.get('GOOGLE_API_KEY')
     
     const supabase = createClient(supabaseUrl ?? '', supabaseKey ?? '');
 
@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
     }
 
     // 4. Call Gemini
-    if (!geminiKey) throw new Error("GEMINI_API_KEYが設定されていません");
+    if (!geminiKey) throw new Error("GOOGLE_API_KEYが設定されていません");
 
     const prompt = `
 あなたは大学の教授です。以下のレポートを採点してください。
@@ -130,24 +130,47 @@ JSON形式で回答:
 }
 `;
 
-    console.log('Calling Gemini API (gemini-2.0-flash)...')
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { 
-              responseMimeType: "application/json",
-              temperature: 0.3
-            }
-        })
-    });
+    console.log('Calling Gemini API (gemini-1.5-flash)...')
+    
+    const callGemini = async (retryCount = 0): Promise<any> => {
+        const MAX_RETRIES = 3;
+        const INITIAL_BACKOFF_MS = 1000;
 
-    if (!geminiRes.ok) {
-        const errText = await geminiRes.text();
-        console.error("Gemini API Error:", geminiRes.status, errText);
-        throw new Error("Gemini APIエラー: " + geminiRes.status);
-    }
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { 
+                  responseMimeType: "application/json",
+                  temperature: 0.3
+                }
+            })
+        });
+
+        if (res.status === 429) {
+            if (retryCount < MAX_RETRIES) {
+                const waitTime = INITIAL_BACKOFF_MS * Math.pow(2, retryCount);
+                console.warn(`Rate limit hit (429). Retrying in ${waitTime}ms... (Attempt ${retryCount + 1}/${MAX_RETRIES})`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                return callGemini(retryCount + 1);
+            } else {
+                 const errText = await res.text();
+                 console.error("Gemini API Error (429): Max retries reached.", errText);
+                 throw new Error("Gemini APIエラー: レートリミットに達しました (429)。しばらく待ってから再試行してください。");
+            }
+        }
+
+        if (!res.ok) {
+            const errText = await res.text();
+            console.error("Gemini API Error:", res.status, errText);
+            throw new Error("Gemini APIエラー: " + res.status);
+        }
+
+        return res;
+    };
+
+    const geminiRes = await callGemini();
 
     const geminiData = await geminiRes.json();
     const resultText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
