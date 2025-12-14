@@ -1,10 +1,15 @@
+import { createClient } from '@supabase/supabase-js'
 
-import { createClient } from 'npm:@supabase/supabase-js@2'
-import "jsr:@std/dotenv/load";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  // console.warn("Supabase credentials not found in process.env. Ensure you are loading .env.local if running locally.");
+}
 
 const supabase = createClient(
-  Deno.env.get('NEXT_PUBLIC_SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  supabaseUrl ?? '',
+  supabaseKey ?? ''
 )
 
 const courseId = 'e6329804-955f-4864-bde4-0bf648b93b1a';

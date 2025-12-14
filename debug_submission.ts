@@ -1,13 +1,12 @@
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import "jsr:@std/dotenv/load";
+import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = Deno.env.get("NEXT_PUBLIC_SUPABASE_URL") || "";
-const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error("Missing env vars");
-  Deno.exit(1);
+  console.error("Missing env vars. Ensure you are loading .env.local if running locally.");
+  process.exit(1);
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
